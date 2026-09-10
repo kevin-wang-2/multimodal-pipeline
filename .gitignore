@@ -24,3 +24,4 @@ dist/
 .env.local
 *.log
 cache/
+models/

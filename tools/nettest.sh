@@ -4,6 +4,12 @@
 # 只依赖两端都有: ssh / cat / head（Windows 用 Git Bash 自带的即可）
 # 上传: Mac -> 远端        下载: 远端 -> Mac
 #
+# ⚠️⚠️ 警告：本工具会把远端数据穿过 Git Bash(MSYS) 管道，在 **Windows 目标** 上
+#     数字会严重偏低（实测约低 10 倍：MSYS 管道 7.7 MB/s vs cmd 内建 67 MB/s）。
+#     测真实的网络能力请用 tools/tcpbench.py（原生 TCP）或 scp（SFTP，无 shell）。
+#     本脚本只适合做「同方法横向对比」。
+#     背景： https://github.com/... (见 docs/结果-网络测试.md)
+#
 # 用法:
 #   tools/nettest.sh <ssh目标> [每次MB=200] [并发=4]
 # 例:
@@ -24,6 +30,7 @@ now() { python3 -c 'import time;print(time.time())'; }
 rate() { awk -v s="$1" -v m="$2" 'BEGIN{printf "%6.1f MB/s  (%5.0f Mbit/s)", m/s, m*8/s}'; }
 
 echo "目标: $DEST   每次 ${MB} MiB   并发 ${N}"
+echo "⚠️  经 Git Bash 管道测量；Windows 目标下数值偏低约 10x。纯网络能力请用 tools/tcpbench.py"
 echo
 
 # ---- 预热（避免 TCP 慢启动污染第一发）----

@@ -109,7 +109,7 @@ python3 tools/make_test_clip.py            # macOS：借 say 生成语音段；�
 
 ## 托管
 
-主仓库托管在自建 Gitea（CI runner 挂在 GPU 机上，方便跑模型相关的测试），GitHub 为只读镜像。Issue 与 PR 请到主仓库。
+开发在内部 Gitea 进行（CI runner 挂在 GPU 机上，方便跑模型相关的测试；issue 只用于内部里程碑跟踪，不对外）。[GitHub](https://github.com/kevin-wang-2/multimodal-pipeline) 是公开镜像，镜像不作为开发入口。
 
 ## 许可
 

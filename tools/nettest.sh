@@ -8,14 +8,14 @@
 #     数字会严重偏低（实测约低 10 倍：MSYS 管道 7.7 MB/s vs cmd 内建 67 MB/s）。
 #     测真实的网络能力请用 tools/tcpbench.py（原生 TCP）或 scp（SFTP，无 shell）。
 #     本脚本只适合做「同方法横向对比」。
-#     背景： https://github.com/... (见 docs/结果-网络测试.md)
+#     背景见 docs/结果-网络测试.md
 #
 # 用法:
 #   tools/nettest.sh <ssh目标> [每次MB=200] [并发=4]
 # 例:
-#   tools/nettest.sh seanartech-lab
-#   tools/nettest.sh lenovo@192.168.71.201 300
-#   tools/nettest.sh 100.64.0.2 200 8
+#   tools/nettest.sh gpu-box
+#   tools/nettest.sh user@192.168.1.50 300
+#   tools/nettest.sh 10.0.0.7 200 8
 set -u
 
 DEST="${1:-}"; MB="${2:-200}"; N="${3:-4}"

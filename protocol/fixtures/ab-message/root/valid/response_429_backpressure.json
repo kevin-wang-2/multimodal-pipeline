@@ -1,0 +1,13 @@
+{
+  "type": "response",
+  "protocol_version": "1.0",
+  "ts": "2026-09-10T17:00:00+08:00",
+  "payload": {
+    "req_id": "r-1",
+    "http_status": 429,
+    "body": {
+      "error": "backpressure",
+      "retry_after_sec": 5
+    }
+  }
+}

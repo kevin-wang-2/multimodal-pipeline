@@ -1,0 +1,68 @@
+{
+  "type": "heartbeat",
+  "protocol_version": "1.0",
+  "ts": "2026-09-10T17:00:00+08:00",
+  "payload": {
+    "node_id": "mac-m1",
+    "node_key": "k3y-0123456789abcdef",
+    "capabilities": [
+      {
+        "id": "triage.audio",
+        "modal": "audio",
+        "description": "音频预检：VAD 定界 + 段级粗类别打标 + 语音段 ASR，产出带时间轴的 digest。",
+        "tiers": [
+          {
+            "tier": "cpu",
+            "engine": "silero-vad+sensevoice-int8+zipformer-tagging-int8",
+            "engine_version": "m0-2026-09-10",
+            "cost": "low",
+            "latency_hint": "~0.05× 实时",
+            "max_concurrency": 2
+          }
+        ],
+        "input": {
+          "media": "required",
+          "params_schema": {
+            "type": "object",
+            "properties": {
+              "label_confidence_threshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0.3
+              },
+              "language": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "output_schema": "urn:mmp:protocol:1:digest"
+      },
+      {
+        "id": "echo",
+        "modal": "audio",
+        "description": "S1 用：原样返回媒体 hash 与 params。",
+        "tiers": [
+          {
+            "tier": "cpu",
+            "engine": "echo",
+            "engine_version": "1",
+            "cost": "low"
+          }
+        ],
+        "input": {
+          "media": "required"
+        },
+        "output_schema": {
+          "type": "object"
+        }
+      }
+    ],
+    "engine_versions": {
+      "silero-vad+sensevoice-int8+zipformer-tagging-int8": "m0-2026-09-10",
+      "echo": "1"
+    }
+  }
+}

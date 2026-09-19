@@ -1,0 +1,11 @@
+{
+  "type": "echo",
+  "media": {
+    "get": {
+      "url": "https://storage.example/bucket/a.wav?X-Sig=abc",
+      "headers": {
+        "Authorization": "Bearer t"
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "pitch_transcribe",
+  "modal": "audio",
+  "description": "对哼唱 / 歌唱段做音高转写，输出音符列表。",
+  "consumes": {
+    "labels": [
+      "Humming",
+      "Singing",
+      "Music"
+    ],
+    "granularity": "segment"
+  },
+  "tiers": [
+    {
+      "tier": "gpu",
+      "engine": "basic-pitch",
+      "engine_version": "0.4.0",
+      "cost": "medium",
+      "latency_hint": "~2s",
+      "vram_mb": 1024
+    }
+  ],
+  "input": {
+    "media": "required",
+    "params_schema": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "notes": {
+        "type": "array"
+      }
+    }
+  }
+}

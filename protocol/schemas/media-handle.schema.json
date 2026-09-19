@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mmp:protocol:1:media-handle",
+  "title": "MediaHandle",
+  "description": "媒体句柄（架构.md §6）。一种契约、多种实例：A 只做 HTTP GET / PUT，不认识任何存储厂商。inline 与 get 二选一；put 可选，供大输出写回。内容 hash 由 A 取到字节后计算，与来源无关。",
+  "type": "object",
+  "properties": {
+    "inline": {
+      "description": "base64 编码的媒体字节。解码后上限 8 MiB（8388608 字节 → base64 最长 11184812 字符）；超过必须走 get。",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "minLength": 4,
+      "maxLength": 11184812
+    },
+    "get": {
+      "description": "带认证的 GET 端点：对象存储 presigned URL、宿主自带 token 的接口等都是它的实例。",
+      "$ref": "#/$defs/Endpoint"
+    },
+    "put": {
+      "description": "可选：大输出的 PUT 端点。存在时 A 可把超限输出 PUT 到这里，响应里只给引用。",
+      "$ref": "#/$defs/Endpoint"
+    },
+    "content_type": {
+      "description": "可选的 MIME 提示。A 仍以字节嗅探为准。",
+      "type": "string",
+      "pattern": "^[a-z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+$"
+    }
+  },
+  "oneOf": [
+    { "required": ["inline"] },
+    { "required": ["get"] }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Endpoint": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "format": "uri", "pattern": "^https?://" },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["url"],
+      "additionalProperties": false
+    },
+    "MediaId": {
+      "description": "内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

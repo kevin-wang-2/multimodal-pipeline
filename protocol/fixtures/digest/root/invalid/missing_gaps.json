@@ -1,0 +1,63 @@
+{
+  "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+  "kind": "audio",
+  "duration_sec": 4.392,
+  "timeline_unit": "sec",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 2.182,
+      "labels": [],
+      "label_status": "unclassified",
+      "asr": null
+    },
+    {
+      "start": 2.182,
+      "end": 4.384,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.735
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    }
+  ],
+  "global": {
+    "speech_ratio": 0.501
+  },
+  "tools": {
+    "vad": "ok",
+    "audio_tagging": "ok",
+    "asr": "ok"
+  },
+  "capabilities_available": [
+    "pitch_transcribe",
+    "chord_recognize",
+    "source_separate",
+    "denoise",
+    "speaker_id",
+    "music_id",
+    "transcribe_segment"
+  ],
+  "source": {
+    "tier": "cpu",
+    "engine": "silero-vad+sensevoice-int8+zipformer-tagging-int8",
+    "engine_version": "m0-2026-09-10",
+    "generated_at": "2026-09-10T17:00:00+08:00",
+    "degraded": false,
+    "params": {
+      "label_confidence_threshold": 0.3
+    }
+  },
+  "timings_ms": {
+    "vad": 45,
+    "tagging": 12,
+    "asr": 210
+  }
+}

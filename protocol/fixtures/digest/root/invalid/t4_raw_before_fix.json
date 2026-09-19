@@ -1,0 +1,66 @@
+{
+  "media_id": "sha256:6b4a2b8c89e0bcf2",
+  "kind": "audio",
+  "duration_sec": 4.392,
+  "timeline_unit": "sec",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 2.182,
+      "labels": [
+        {
+          "tag": "Boing",
+          "score": 0.118
+        }
+      ],
+      "asr": null
+    },
+    {
+      "start": 2.182,
+      "end": 4.384,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.735
+        }
+      ],
+      "asr": {
+        "text": "我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": null
+      }
+    }
+  ],
+  "global": {
+    "caption": null,
+    "speech_ratio": 0.501
+  },
+  "tools": {
+    "vad": "ok",
+    "audio_tagging": "ok",
+    "asr": "ok"
+  },
+  "gaps": [
+    "0.00–2.18s 是非语音（top=Boing:0.118），只知类别、不知内容"
+  ],
+  "capabilities_available": [
+    "pitch_transcribe",
+    "chord_recognize",
+    "source_separate",
+    "denoise",
+    "speaker_id",
+    "music_id",
+    "transcribe_segment"
+  ],
+  "source": {
+    "tier": "L1-floor",
+    "engine": "silero-vad+sensevoice-int8+zipformer-tagging-int8",
+    "cached": false,
+    "generated_at": "2026-09-10T17:00:00+08:00"
+  },
+  "timings_ms": {
+    "vad": 45,
+    "tagging": 12,
+    "asr": 210
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "protocol_version": "1.0",
+  "nodes": [
+    {
+      "node_id": "mac-m1",
+      "connected_since": "yesterday",
+      "last_heartbeat": "2026-09-10T17:00:00+08:00"
+    }
+  ]
+}

@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mmp:protocol:1:job-api",
+  "title": "JobApi",
+  "description": "C→B 任务 API（架构.md §5）。只有一种调用形态：提交即返回 job_id，可选 wait 秒长轮询。本文件没有根 schema，只有 $defs：每个端点的请求体 / 响应体各一个定义。人读版见 docs/协议.md。",
+  "$defs": {
+    "NodeId": {
+      "description": "A 节点 id，由部署配置指定。小写字母、数字、连字符。",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "JobId": {
+      "description": "由 A 生成：<node_id>-<ULID>。B 不生成 id，靠前缀把 GET / DELETE 路由回原节点。",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*-[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Priority": {
+      "type": "string",
+      "enum": ["interactive", "batch"]
+    },
+    "JobStatus": {
+      "description": "queued → running → done | failed | cancelled；queued → cancelled。",
+      "type": "string",
+      "enum": ["queued", "running", "done", "failed", "cancelled"]
+    },
+    "ErrorCode": {
+      "description": "错误码表；HTTP 状态一一对应，见 docs/协议.md。",
+      "type": "string",
+      "enum": [
+        "bad_request",
+        "unsupported_type",
+        "unauthorized",
+        "not_found",
+        "media_too_large",
+        "media_fetch_failed",
+        "backpressure",
+        "engine_failed",
+        "no_node",
+        "node_offline",
+        "timeout"
+      ]
+    },
+    "Wait": {
+      "description": "最长阻塞秒数。B 侧在途超时 = wait + 5s。",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 120,
+      "default": 0
+    },
+
+    "JobRequest": {
+      "description": "POST /jobs 请求体。",
+      "type": "object",
+      "properties": {
+        "type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+        "media": { "$ref": "urn:mmp:protocol:1:media-handle" },
+        "params": {
+          "description": "任务类型专有参数，按该类型 capability.input.params_schema 校验。进缓存键（规范化后 hash）。",
+          "type": "object",
+          "default": {}
+        },
+        "priority": { "$ref": "#/$defs/Priority", "default": "interactive" },
+        "tier": {
+          "description": "档位偏好。省略 = 该类型的默认档；A 若无法满足可回落并在 source.degraded 标注。",
+          "$ref": "urn:mmp:protocol:1:capability#/$defs/Tier"
+        },
+        "wait": { "$ref": "#/$defs/Wait" }
+      },
+      "required": ["type", "media"],
+      "additionalProperties": false
+    },
+
+    "Source": {
+      "description": "结果的来源标注（铁律 5）。描述的是产物本身：哪个引擎、哪一档、何时、是否降级。\"是否命中缓存\"属于本次交付而非产物，放在 JobDone.cached。",
+      "type": "object",
+      "properties": {
+        "tier": { "$ref": "urn:mmp:protocol:1:capability#/$defs/Tier" },
+        "engine": { "type": "string", "minLength": 1 },
+        "engine_version": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "degraded": {
+          "description": "true = 未按请求的档位 / 完整流程产出（超时回落、部分工具失败等）。降级必须显式。",
+          "type": "boolean"
+        },
+        "degraded_reason": {
+          "type": "string",
+          "enum": ["timeout", "tier_unavailable", "partial_failure"]
+        },
+        "params": {
+          "description": "实际生效的参数（规范化后），含默认值；如 label_confidence_threshold。",
+          "type": "object"
+        }
+      },
+      "required": ["tier", "engine", "engine_version", "generated_at", "degraded"],
+      "if": { "properties": { "degraded": { "const": true } } },
+      "then": { "required": ["degraded_reason"] },
+      "additionalProperties": false
+    },
+
+    "ResultRef": {
+      "description": "大输出已 PUT 到请求方给的 media.put 端点时，响应里只给这份引用。",
+      "type": "object",
+      "properties": {
+        "content_type": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "required": ["content_type", "bytes", "sha256"],
+      "additionalProperties": false
+    },
+
+    "JobDone": {
+      "description": "200：任务完成。result 与 result_ref 二选一。",
+      "type": "object",
+      "properties": {
+        "job_id": { "$ref": "#/$defs/JobId" },
+        "type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+        "status": { "const": "done" },
+        "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+        "cached": { "type": "boolean" },
+        "source": { "$ref": "#/$defs/Source" },
+        "result": {
+          "description": "该任务类型 output_schema 的实例；预检类型即 digest。"
+        },
+        "result_ref": { "$ref": "#/$defs/ResultRef" },
+        "timings_ms": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "required": ["job_id", "type", "status", "media_id", "cached", "source"],
+      "oneOf": [
+        { "required": ["result"] },
+        { "required": ["result_ref"] }
+      ],
+      "additionalProperties": false
+    },
+
+    "JobPending": {
+      "description": "202：排队中或运行中。",
+      "type": "object",
+      "properties": {
+        "job_id": { "$ref": "#/$defs/JobId" },
+        "type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+        "status": { "type": "string", "enum": ["queued", "running"] },
+        "eta_sec": { "type": "number", "minimum": 0 },
+        "queue_position": { "type": "integer", "minimum": 0 },
+        "cancel_requested": {
+          "description": "DELETE 已收到但任务在运行中，A 尽力而为；后续 GET 会得到 cancelled 或 done。",
+          "type": "boolean"
+        }
+      },
+      "required": ["job_id", "type", "status"],
+      "additionalProperties": false
+    },
+
+    "JobFailed": {
+      "description": "任务已入队但最终失败；HTTP 状态按 error 对应。",
+      "type": "object",
+      "properties": {
+        "job_id": { "$ref": "#/$defs/JobId" },
+        "type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+        "status": { "const": "failed" },
+        "error": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "retry_after_sec": { "type": "number", "minimum": 0 }
+      },
+      "required": ["job_id", "type", "status", "error"],
+      "additionalProperties": false
+    },
+
+    "JobCancelled": {
+      "description": "200：任务已取消。",
+      "type": "object",
+      "properties": {
+        "job_id": { "$ref": "#/$defs/JobId" },
+        "type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+        "status": { "const": "cancelled" }
+      },
+      "required": ["job_id", "type", "status"],
+      "additionalProperties": false
+    },
+
+    "JobResponse": {
+      "description": "POST /jobs、GET /jobs/{id}、DELETE /jobs/{id} 的任务态响应体。",
+      "oneOf": [
+        { "$ref": "#/$defs/JobDone" },
+        { "$ref": "#/$defs/JobPending" },
+        { "$ref": "#/$defs/JobFailed" },
+        { "$ref": "#/$defs/JobCancelled" }
+      ]
+    },
+
+    "ErrorBody": {
+      "description": "没有 job_id 的错误（请求没被接受或找不到任务）。有 job_id 的失败用 JobFailed。",
+      "type": "object",
+      "properties": {
+        "error": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "retry_after_sec": { "type": "number", "minimum": 0 }
+      },
+      "required": ["error"],
+      "additionalProperties": false
+    },
+
+    "AnyResponse": {
+      "description": "任务端点可能返回的任何响应体。",
+      "oneOf": [
+        { "$ref": "#/$defs/JobResponse" },
+        { "$ref": "#/$defs/ErrorBody" }
+      ]
+    },
+
+    "CapabilitiesResponse": {
+      "description": "GET /capabilities：B 把当前已连接 A 的注册表按任务类型合并。B 无状态，这只是此刻的视图。",
+      "type": "object",
+      "properties": {
+        "protocol_version": { "$ref": "#/$defs/ProtocolVersion" },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "capability": { "$ref": "urn:mmp:protocol:1:capability" },
+              "nodes": {
+                "description": "提供该任务类型的节点。",
+                "type": "array",
+                "items": { "$ref": "#/$defs/NodeId" },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": ["capability", "nodes"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["protocol_version", "capabilities"],
+      "additionalProperties": false
+    },
+
+    "HealthResponse": {
+      "description": "GET /health：已连接 A 及其最近心跳摘要。",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "ok = 至少一个节点在线；no_node = 没有节点。",
+          "type": "string",
+          "enum": ["ok", "no_node"]
+        },
+        "protocol_version": { "$ref": "#/$defs/ProtocolVersion" },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "node_id": { "$ref": "#/$defs/NodeId" },
+              "connected_since": { "type": "string", "format": "date-time" },
+              "last_heartbeat": { "type": "string", "format": "date-time" },
+              "heartbeat": { "$ref": "urn:mmp:protocol:1:ab-message#/$defs/HeartbeatPayload" }
+            },
+            "required": ["node_id", "connected_since", "last_heartbeat"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["status", "protocol_version", "nodes"],
+      "additionalProperties": false
+    },
+
+    "ProtocolVersion": {
+      "description": "major.minor。major 不同即不兼容；minor 只做向后兼容的追加。",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    }
+  }
+}

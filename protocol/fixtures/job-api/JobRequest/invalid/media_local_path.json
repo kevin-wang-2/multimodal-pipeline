@@ -1,0 +1,6 @@
+{
+  "type": "triage.audio",
+  "media": {
+    "path": "/tmp/a.wav"
+  }
+}

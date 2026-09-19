@@ -1,0 +1,8 @@
+{
+  "type": "triage.audio",
+  "media": {
+    "inline": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+  },
+  "priority": "high",
+  "wait": 5
+}

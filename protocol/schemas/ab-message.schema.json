@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mmp:protocol:1:ab-message",
+  "title": "AbMessage",
+  "description": "A↔B 消息（架构.md §4）。一条 ws 连接，四类消息，统一信封 {type, protocol_version, ts, payload}。A/B 绑定时同样的信封走进程内调用。根 schema 即信封。",
+  "type": "object",
+  "properties": {
+    "type": { "type": "string", "enum": ["register", "heartbeat", "request", "response"] },
+    "protocol_version": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/ProtocolVersion" },
+    "ts": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "required": ["type", "protocol_version", "ts", "payload"],
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": { "type": { "const": "register" }, "payload": { "$ref": "#/$defs/RegisterPayload" } }
+    },
+    {
+      "properties": { "type": { "const": "heartbeat" }, "payload": { "$ref": "#/$defs/HeartbeatPayload" } }
+    },
+    {
+      "properties": { "type": { "const": "request" }, "payload": { "$ref": "#/$defs/RequestPayload" } }
+    },
+    {
+      "properties": { "type": { "const": "response" }, "payload": { "$ref": "#/$defs/ResponsePayload" } }
+    }
+  ],
+  "$defs": {
+    "RegisterPayload": {
+      "description": "A→B。连接建立后的第一条消息；重连后必须重发，B 用 node_id 覆盖旧表项。B 校验失败直接关连接（见 CloseCode），不回消息。",
+      "type": "object",
+      "properties": {
+        "node_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/NodeId" },
+        "node_key": {
+          "description": "静态节点密钥，配置下发。",
+          "type": "string",
+          "minLength": 16
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "urn:mmp:protocol:1:capability" },
+          "minItems": 1
+        },
+        "engine_versions": {
+          "description": "引擎名 → 版本，是 capabilities[].tiers[].engine_version 的汇总，便于 B 在 /health 里展示。",
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        }
+      },
+      "required": ["node_id", "node_key", "capabilities", "engine_versions"],
+      "additionalProperties": false
+    },
+
+    "HeartbeatPayload": {
+      "description": "A→B，每 10s 一次；B 连续 3 次未收到视为断线。",
+      "type": "object",
+      "properties": {
+        "node_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/NodeId" },
+        "queue_len": {
+          "description": "排队中（未开始）的任务数，含所有优先级。",
+          "type": "integer",
+          "minimum": 0
+        },
+        "running": { "type": "integer", "minimum": 0 },
+        "vram_free_mb": {
+          "description": "空余显存（MiB）。无 GPU 的节点省略。",
+          "type": "integer",
+          "minimum": 0
+        },
+        "engines_loaded": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      },
+      "required": ["node_id", "queue_len", "running", "engines_loaded"],
+      "additionalProperties": false
+    },
+
+    "RequestPayload": {
+      "description": "B→A。C 的三种任务操作都映射成 request；提交 / 查询 / 取消以 op 区分，req_id 由 B 生成并用于配对。",
+      "type": "object",
+      "properties": {
+        "req_id": { "$ref": "#/$defs/ReqId" },
+        "op": { "type": "string", "enum": ["submit", "get", "cancel"] },
+        "job": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/JobRequest" },
+        "job_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/JobId" },
+        "wait": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Wait" }
+      },
+      "required": ["req_id", "op"],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": { "op": { "const": "submit" } },
+          "required": ["job"],
+          "not": { "required": ["job_id"] }
+        },
+        {
+          "properties": { "op": { "enum": ["get", "cancel"] } },
+          "required": ["job_id"],
+          "not": { "required": ["job"] }
+        }
+      ]
+    },
+
+    "ResponsePayload": {
+      "description": "A→B。与 HTTP 语义一一对应：B 把 http_status 与 body 原样透传给 C。",
+      "type": "object",
+      "properties": {
+        "req_id": { "$ref": "#/$defs/ReqId" },
+        "http_status": { "type": "integer", "minimum": 200, "maximum": 599 },
+        "body": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/AnyResponse" }
+      },
+      "required": ["req_id", "http_status", "body"],
+      "additionalProperties": false
+    },
+
+    "ReqId": {
+      "description": "B 生成，连接内唯一即可。",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+
+    "CloseCode": {
+      "description": "B 拒绝 A 时使用的 ws 关闭码（4000–4999 为应用私有区）。A 收到 4001 / 4002 不应重试，除非配置或版本变更。",
+      "type": "integer",
+      "enum": [4001, 4002, 4003],
+      "$comment": "4001 unauthorized：node_key 校验失败。4002 protocol_mismatch：protocol_version 的 major 不同。4003 bad_register：register 消息不符合 schema 或不是首条消息。"
+    }
+  }
+}

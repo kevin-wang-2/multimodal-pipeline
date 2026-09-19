@@ -1,0 +1,51 @@
+{
+  "id": "ocr.structured",
+  "modal": "document",
+  "description": "文档 OCR：快档出文本行，慢档出版面结构（Markdown + 元素标签）。",
+  "tiers": [
+    {
+      "tier": "gpu-fast",
+      "engine": "pp-ocrv6",
+      "engine_version": "paddleocr-3.7",
+      "cost": "low",
+      "latency_hint": "~0.5s/page",
+      "vram_mb": 2048,
+      "max_concurrency": 2
+    },
+    {
+      "tier": "gpu",
+      "engine": "paddleocr-vl",
+      "engine_version": "1.6-0.9b",
+      "cost": "high",
+      "latency_hint": "~9s/page",
+      "vram_mb": 12288,
+      "max_concurrency": 1
+    }
+  ],
+  "input": {
+    "media": "required",
+    "params_schema": {
+      "type": "object",
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "pages": {
+        "type": "array"
+      }
+    },
+    "required": [
+      "pages"
+    ]
+  }
+}

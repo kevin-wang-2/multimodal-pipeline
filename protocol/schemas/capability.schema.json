@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mmp:protocol:1:capability",
+  "title": "Capability",
+  "description": "任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，register 时整表上报；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。",
+  "type": "object",
+  "properties": {
+    "id": { "$ref": "#/$defs/TaskTypeId" },
+    "modal": {
+      "description": "该任务类型消费的媒体模态。",
+      "type": "string",
+      "enum": ["audio", "image", "video", "document"]
+    },
+    "description": {
+      "description": "给上层 agent 看的一句话说明；agent 按能力名从 /capabilities 按需拉取。",
+      "type": "string",
+      "maxLength": 500
+    },
+    "consumes": {
+      "description": "该能力适用的媒体特征；预检据此筛出 capabilities_available（M2）。省略表示对该模态的任何媒体都适用。",
+      "type": "object",
+      "properties": {
+        "labels": {
+          "description": "适用的粗类别标签（AudioSet 等），任一命中即可。",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "granularity": {
+          "type": "string",
+          "enum": ["whole", "segment", "page", "region"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "tiers": {
+      "description": "该任务类型在本节点可用的引擎档位，按偏好排序：第一项是默认档，后面的是回落 / 升级候选。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/TierSpec" },
+      "minItems": 1
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "media": {
+          "description": "是否需要媒体句柄。",
+          "type": "string",
+          "enum": ["required", "optional", "none"]
+        },
+        "params_schema": {
+          "description": "params 的 JSON Schema（内联）。省略表示不接受任何 params。",
+          "type": "object"
+        }
+      },
+      "required": ["media"],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "description": "结果的 schema：本协议内 schema 的 $id（如 urn:mmp:protocol:1:digest），或内联的 JSON Schema。",
+      "oneOf": [
+        { "type": "string", "pattern": "^urn:mmp:protocol:[0-9]+:[a-z0-9-]+(#.*)?$" },
+        { "type": "object" }
+      ]
+    }
+  },
+  "required": ["id", "modal", "tiers", "input", "output_schema"],
+  "additionalProperties": false,
+  "$defs": {
+    "TaskTypeId": {
+      "description": "任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "maxLength": 64
+    },
+    "Tier": {
+      "description": "引擎档位。cpu 便宜档常开；gpu-fast 快档；gpu 慢档 / 重模型；remote 由 A 转调外部服务。",
+      "type": "string",
+      "enum": ["cpu", "gpu-fast", "gpu", "remote"]
+    },
+    "TierSpec": {
+      "type": "object",
+      "properties": {
+        "tier": { "$ref": "#/$defs/Tier" },
+        "engine": {
+          "description": "引擎标识，如 silero-vad+sensevoice-int8+zipformer-tagging-int8、pp-ocrv6、paddleocr-vl。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "engine_version": {
+          "description": "进缓存键；升级引擎自动失效旧缓存。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "cost": { "type": "string", "enum": ["low", "medium", "high"] },
+        "latency_hint": {
+          "description": "人读的延迟提示，如 \"~2s\"、\"~9s/page\"。",
+          "type": "string",
+          "maxLength": 64
+        },
+        "vram_mb": {
+          "description": "单任务显存预算（MiB）；调度器据此串行。cpu 档省略。",
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_concurrency": {
+          "description": "该档位在本节点的并发上限。",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["tier", "engine", "engine_version", "cost"],
+      "additionalProperties": false
+    }
+  }
+}

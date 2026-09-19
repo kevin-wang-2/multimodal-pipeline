@@ -1,0 +1,11 @@
+{
+  "type": "heartbeat",
+  "protocol_version": "1.0",
+  "ts": "2026-09-10T17:00:00+08:00",
+  "payload": {
+    "node_id": "mac-m1",
+    "queue_len": 0,
+    "running": 0,
+    "engines_loaded": []
+  }
+}

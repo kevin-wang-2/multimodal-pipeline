@@ -1,0 +1,9 @@
+{
+  "inline": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
+  "get": {
+    "url": "https://storage.example/bucket/a.wav?X-Sig=abc",
+    "headers": {
+      "Authorization": "Bearer t"
+    }
+  }
+}

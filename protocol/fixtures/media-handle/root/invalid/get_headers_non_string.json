@@ -1,0 +1,8 @@
+{
+  "get": {
+    "url": "https://x.example/a",
+    "headers": {
+      "X-N": 1
+    }
+  }
+}

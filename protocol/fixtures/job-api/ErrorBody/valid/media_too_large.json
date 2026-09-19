@@ -1,0 +1,4 @@
+{
+  "error": "media_too_large",
+  "message": "inline > 8 MiB, use get"
+}

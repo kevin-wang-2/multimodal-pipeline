@@ -1,0 +1,19 @@
+{
+  "id": "echo",
+  "modal": "audio",
+  "description": "S1 用：原样返回媒体 hash 与 params。",
+  "tiers": [
+    {
+      "tier": "cpu",
+      "engine": "echo",
+      "engine_version": "1",
+      "cost": "low"
+    }
+  ],
+  "input": {
+    "media": "required"
+  },
+  "output_schema": {
+    "type": "object"
+  }
+}

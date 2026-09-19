@@ -50,6 +50,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
 - [x] **M0 手工验证**（2026-09-10）：VAD 定界 → 段级打标 → ASR → 组装 digest → 隔离模型实例盲测，**选对工具、指对时间段**；digest schema 收敛。
 - [x] 文档 / 图像腿实测（2026-09-17）：三档 OCR 跑通，"快档预扫 + 按页升级"成立，runner 必须排队。
 - [ ] **M1 infra 骨架**：A 的队列 / 缓存 / 引擎池 + 出站 ws；B 协议 + py/ts 两个实现；C 的 ts 包。只挂两个任务类型：`triage.audio`（CPU）与 `ocr.structured`（GPU）。步骤见 [docs/实施计划.md](docs/实施计划.md)。
+  - [x] S0 协议定稿（2026-09-19）：[docs/协议.md](docs/协议.md) + `protocol/`，py / ts 契约测试全绿。
 - [ ] M2 能力层（工具注册表 + 首批 head）
 - [ ] M3 预算与反馈升级
 - [ ] M4 模态同构（图片 / 视频复用同一套抽象）
@@ -70,8 +71,13 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
 ## 仓库结构
 
 ```
+protocol/
+  schemas/             五个 JSON Schema（A↔B 消息 / 任务 API / 媒体句柄 / digest / 能力元数据），语言中立的唯一源头
+  fixtures/            契约测试样本（含 M0 的 digest）
+  tests/py, tests/ts   同一批 fixtures 在 jsonschema 与 ajv 两侧的契约测试
 docs/
   架构.md              设计文档（公开版）
+  协议.md              协议 v1.0 人读版，与 protocol/schemas 同步
   实施计划.md          M1 的步骤拆分、验收与顺序（S0–S6）
   M0-测试计划.md        M0 四组实验的计划
   结果-T1.md … T5      每组实验的原始记录（负结果也记）

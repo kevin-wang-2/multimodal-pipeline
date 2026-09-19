@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mmp:protocol:1:digest",
+  "title": "Digest",
+  "description": "预检产出的结构化 digest（架构.md §8，T4 盲测收敛）。segments 是唯一的时间轴事实源；gaps 是显式的\"我还不知道什么\"。v1 只定义 kind=audio；图片 / 视频在 M4 追加。",
+  "type": "object",
+  "properties": {
+    "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+    "kind": { "type": "string", "enum": ["audio"] },
+    "duration_sec": { "type": "number", "minimum": 0 },
+    "timeline_unit": {
+      "description": "统一为秒（浮点）；区间左闭右开 [start, end)。",
+      "const": "sec"
+    },
+    "segments": {
+      "description": "覆盖全时长、按 start 升序、彼此不重叠的段。空媒体允许为空数组。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Segment" }
+    },
+    "global": {
+      "description": "整条媒体级别的统计。便宜档不设 caption，需要描述时它是 capabilities_available 里的一项能力。",
+      "type": "object",
+      "properties": {
+        "speech_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "tools": {
+      "description": "每个参与工具的状态。失败项必须显式标注，不许静默。",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/ToolStatus" },
+      "minProperties": 1
+    },
+    "gaps": {
+      "description": "规则生成的缺口清单，是上层判断\"够不够\"的主要依据。每条是任务无关的结构事实或\"无法判定\"的声明。",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "capabilities_available": {
+      "description": "任务无关的能力清单：这段媒体上能做什么。项为任务类型 id。",
+      "type": "array",
+      "items": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+      "uniqueItems": true
+    },
+    "source": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Source" },
+    "timings_ms": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    }
+  },
+  "required": ["media_id", "kind", "duration_sec", "timeline_unit", "segments", "tools", "gaps", "capabilities_available", "source"],
+  "additionalProperties": false,
+  "$defs": {
+    "ToolStatus": {
+      "type": "string",
+      "enum": ["ok", "partial", "failed", "skipped"]
+    },
+    "Label": {
+      "type": "object",
+      "properties": {
+        "tag": { "type": "string", "minLength": 1 },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["tag", "score"],
+      "additionalProperties": false
+    },
+    "Asr": {
+      "description": "语音段的转写。字段取不到用 \"n/a\" 或省略，不用 null（null 只表示\"不适用\"，见 Segment.asr）。",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "lang": {
+          "description": "BCP-47 语言标签的主语言子标签（zh / en / ja …），或 \"n/a\"。",
+          "type": "string",
+          "pattern": "^([a-z]{2,3}|n/a)$"
+        },
+        "confidence": {
+          "oneOf": [
+            { "type": "number", "minimum": 0, "maximum": 1 },
+            { "const": "n/a" }
+          ]
+        }
+      },
+      "required": ["text", "lang"],
+      "additionalProperties": false
+    },
+    "Segment": {
+      "type": "object",
+      "properties": {
+        "start": { "type": "number", "minimum": 0 },
+        "end": { "type": "number", "minimum": 0 },
+        "labels": {
+          "description": "置信度 ≥ 阈值（source.params.label_confidence_threshold，默认 0.30）的粗类别标签，按 score 降序。",
+          "type": "array",
+          "items": { "$ref": "#/$defs/Label" }
+        },
+        "label_status": {
+          "description": "ok：labels 非空且可信。unclassified：top 分数低于阈值，labels 必须为空，并在 gaps 里说明。failed：打标工具在本段失败，labels 为空。",
+          "type": "string",
+          "enum": ["ok", "unclassified", "failed"]
+        },
+        "asr": {
+          "description": "null = 本段不适用（非语音段）。省略 = 应有但取不到（语音段 ASR 失败，须在 tools.asr 与 gaps 体现）。",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/Asr" }
+          ]
+        }
+      },
+      "required": ["start", "end", "labels", "label_status"],
+      "additionalProperties": false,
+      "if": { "properties": { "label_status": { "const": "ok" } } },
+      "then": { "properties": { "labels": { "type": "array", "minItems": 1 } } },
+      "else": { "properties": { "labels": { "type": "array", "maxItems": 0 } } }
+    }
+  }
+}

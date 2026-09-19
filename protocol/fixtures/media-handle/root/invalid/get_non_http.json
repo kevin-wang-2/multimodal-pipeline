@@ -1,0 +1,5 @@
+{
+  "get": {
+    "url": "s3://bucket/a.wav"
+  }
+}

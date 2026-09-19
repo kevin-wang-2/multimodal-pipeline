@@ -1,0 +1,17 @@
+{
+  "name": "@mmp/protocol-contract-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "协议 schema 的 TypeScript 侧契约测试（ajv）。与 ../py 跑同一批 fixtures。",
+  "scripts": {
+    "test": "tsx --test test_contract.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

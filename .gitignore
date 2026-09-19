@@ -28,3 +28,4 @@ models/
 # Local agent notes
 AGENTS.md.local
 CLAUDE.local.md
+.pytest_cache/

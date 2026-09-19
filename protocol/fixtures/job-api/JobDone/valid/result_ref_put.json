@@ -1,0 +1,19 @@
+{
+  "job_id": "mac-m1-01J7ZQ9K3W8B6Q4M2N1P5R7S9T",
+  "type": "ocr.structured",
+  "status": "done",
+  "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+  "cached": false,
+  "source": {
+    "tier": "gpu",
+    "engine": "paddleocr-vl",
+    "engine_version": "1.6-0.9b",
+    "generated_at": "2026-09-10T17:00:00+08:00",
+    "degraded": false
+  },
+  "result_ref": {
+    "content_type": "application/json",
+    "bytes": 1048576,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

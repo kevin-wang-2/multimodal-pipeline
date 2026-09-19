@@ -1,0 +1,5 @@
+{
+  "put": {
+    "url": "https://storage.example/bucket/a.out.json?X-Sig=def"
+  }
+}

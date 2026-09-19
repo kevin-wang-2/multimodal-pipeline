@@ -1,0 +1,22 @@
+{
+  "type": "ocr.structured",
+  "media": {
+    "get": {
+      "url": "https://storage.example/bucket/a.wav?X-Sig=abc",
+      "headers": {
+        "Authorization": "Bearer t"
+      }
+    },
+    "put": {
+      "url": "https://storage.example/bucket/a.out.json?X-Sig=def"
+    }
+  },
+  "params": {
+    "pages": [
+      1,
+      2
+    ]
+  },
+  "priority": "batch",
+  "tier": "gpu"
+}

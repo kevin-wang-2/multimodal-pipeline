@@ -1,0 +1,9 @@
+{
+  "type": "triage.audio",
+  "media": {
+    "inline": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+  },
+  "priority": "interactive",
+  "wait": 5,
+  "tier": "L1-floor"
+}

@@ -150,10 +150,12 @@ class EngineProcess:
 
     async def shutdown(self, grace: float = 5) -> None:
         if not self.alive:
+            await self._cleanup()
             return
         try:
             await self._send({"type": "shutdown"})
             await asyncio.wait_for(self.proc.wait(), grace)
+            await self._cleanup()
         except Exception:
             await self.kill()
 
@@ -161,9 +163,22 @@ class EngineProcess:
         if self.proc is not None and self.proc.returncode is None:
             self.proc.kill()
             await self.proc.wait()
+        await self._cleanup()
+
+    async def _cleanup(self) -> None:
+        """显式关管道与泵任务；否则 3.12 的 BaseSubprocessTransport.__del__ 会在循环关闭后报错。"""
         for t in (self._reader, self._stderr):
             if t is not None and not t.done():
                 t.cancel()
+        if self.proc is not None and self.proc.stdin is not None:
+            try:
+                self.proc.stdin.close()
+                await self.proc.stdin.wait_closed()
+            except Exception:
+                pass
+        transport = getattr(self.proc, "_transport", None)
+        if transport is not None:
+            transport.close()
 
 
 class EnginePool:

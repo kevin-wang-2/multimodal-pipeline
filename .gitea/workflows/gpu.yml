@@ -1,13 +1,18 @@
-# gpu：打 `gpu` 标签的 runner（GPU 机，Windows + miniconda）。S2 起跑真模型冒烟。
-# 目前实例上还没有 gpu runner，先只允许手动触发；runner 就位后把 on 改成 push 到 main 且 paths 含 node/engines/**。
-# 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）。
+# gpu：GPU 机上的 windows runner（标签 `windows`，Windows + miniconda，RTX 5070 Ti）。S2 起跑真模型冒烟。
+# 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）；说明只写在 YAML 注释里。
 name: gpu
 on:
+  push:
+    branches: [main]
+    paths:
+      - "node/**"
+      - "protocol/**"
+      - ".gitea/workflows/gpu.yml"
   workflow_dispatch:
 
 jobs:
   smoke:
-    runs-on: gpu
+    runs-on: windows
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -24,6 +29,13 @@ jobs:
       - name: GPU visible
         shell: cmd
         run: nvidia-smi
+      - name: Toolchain
+        shell: cmd
+        run: |
+          @echo off
+          where python
+          python --version
+          where conda && conda --version
       - name: Real-model smoke (replaced in S2 by triage.audio on M0 clips)
         shell: cmd
         run: echo S2 placeholder - triage.audio smoke goes here

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
+import threading
 import traceback
 from typing import Awaitable, Callable
 
@@ -22,8 +24,9 @@ class BadParams(Exception):
 
 
 def _emit(msg: dict) -> None:
-    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    # 直接写字节：Windows 上 sys.stdout 的文本层可能是 GBK，且会把 \n 翻成 \r\n
+    sys.stdout.buffer.write((json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 def log(message: str, level: str = "info") -> None:
@@ -33,8 +36,32 @@ def log(message: str, level: str = "info") -> None:
 async def _serve(engine: str, engine_version: str, run: RunFn) -> None:
     _emit({"type": "hello", "engine": engine, "engine_version": engine_version, "protocol_version": PROTOCOL_VERSION})
     loop = asyncio.get_running_loop()
-    reader = asyncio.StreamReader()
-    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+    lines: asyncio.Queue[bytes] = asyncio.Queue()
+
+    def pump() -> None:
+        # 线程读 stdin：asyncio 的 connect_read_pipe 在 Windows Proactor 上对匿名管道不可用。
+        # 用 os.read 裸读 fd 0 而不是 sys.stdin.buffer：daemon 线程若在解释器退出时还持有
+        # BufferedReader 的锁，Python 会 fatal_error（SIGABRT）。裸 fd 没有锁；A 关 stdin 时 read 返回空串。
+        buf = b""
+        while True:
+            try:
+                chunk = os.read(0, 65536)
+            except OSError:
+                chunk = b""
+            if not chunk:
+                break
+            buf += chunk
+            while True:
+                nl = buf.find(b"\n")
+                if nl < 0:
+                    break
+                loop.call_soon_threadsafe(lines.put_nowait, buf[: nl + 1])
+                buf = buf[nl + 1:]
+        if buf:
+            loop.call_soon_threadsafe(lines.put_nowait, buf)
+        loop.call_soon_threadsafe(lines.put_nowait, b"")
+
+    threading.Thread(target=pump, name="stdin-pump", daemon=True).start()
     inflight: dict[str, tuple[asyncio.Task, asyncio.Event]] = {}
 
     async def handle(rid: str, job: dict, cancelled: asyncio.Event) -> None:
@@ -55,7 +82,7 @@ async def _serve(engine: str, engine_version: str, run: RunFn) -> None:
             inflight.pop(rid, None)
 
     while True:
-        raw = await reader.readline()
+        raw = await lines.get()
         if not raw:
             break
         try:

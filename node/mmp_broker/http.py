@@ -2,32 +2,19 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
-from jsonschema import Draft202012Validator
-from referencing import Registry as RefRegistry, Resource
-from referencing.jsonschema import DRAFT202012
 
+from mmp_node import schemas
 from mmp_node.errors import ApiError
 
 from .core import Broker
 
-SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "protocol" / "schemas"
-
-
-def _job_request_validator() -> Draft202012Validator:
-    reg = RefRegistry()
-    for p in SCHEMAS_DIR.glob("*.schema.json"):
-        s = json.loads(p.read_text())
-        reg = reg.with_resource(s["$id"], Resource.from_contents(s, default_specification=DRAFT202012))
-    return Draft202012Validator({"$ref": "urn:mmp:protocol:1:job-api#/$defs/JobRequest"}, registry=reg)
-
 
 def create_app(broker: Broker, api_key: str = "") -> FastAPI:
     app = FastAPI(title="mmp broker", version="1.0", docs_url=None, redoc_url=None)
-    validate = _job_request_validator()
+    validate = schemas.validator_for_ref("urn:mmp:protocol:1:job-api#/$defs/JobRequest")
 
     def respond(status_body: tuple[int, dict]) -> JSONResponse:
         status, body = status_body

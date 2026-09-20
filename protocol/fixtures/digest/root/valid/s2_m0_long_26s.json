@@ -1,0 +1,227 @@
+{
+  "media_id": "sha256:4aeaf8dca0d1bee97b594b47552fd11d6786225c7d086603ef638e31d79aea09",
+  "kind": "audio",
+  "duration_sec": 26.35,
+  "timeline_unit": "sec",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 1.984,
+      "labels": [
+        {
+          "tag": "Music",
+          "score": 0.785
+        },
+        {
+          "tag": "Synthesizer",
+          "score": 0.694
+        },
+        {
+          "tag": "Musical instrument",
+          "score": 0.506
+        },
+        {
+          "tag": "Keyboard (musical)",
+          "score": 0.35
+        }
+      ],
+      "label_status": "ok",
+      "asr": null
+    },
+    {
+      "start": 1.984,
+      "end": 4.544,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.769
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "帮我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    },
+    {
+      "start": 4.544,
+      "end": 6.624,
+      "labels": [],
+      "label_status": "unclassified",
+      "asr": null
+    },
+    {
+      "start": 6.624,
+      "end": 8.928,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.436
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    },
+    {
+      "start": 8.928,
+      "end": 10.752,
+      "labels": [
+        {
+          "tag": "Synthesizer",
+          "score": 0.52
+        },
+        {
+          "tag": "Music",
+          "score": 0.403
+        }
+      ],
+      "label_status": "ok",
+      "asr": null
+    },
+    {
+      "start": 10.752,
+      "end": 13.248,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.804
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "帮我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    },
+    {
+      "start": 13.248,
+      "end": 15.168,
+      "labels": [],
+      "label_status": "unclassified",
+      "asr": null
+    },
+    {
+      "start": 15.168,
+      "end": 17.696,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.846
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "帮我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    },
+    {
+      "start": 17.696,
+      "end": 19.552,
+      "labels": [],
+      "label_status": "unclassified",
+      "asr": null
+    },
+    {
+      "start": 19.552,
+      "end": 22.112,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.759
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "帮我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    },
+    {
+      "start": 22.112,
+      "end": 23.936,
+      "labels": [
+        {
+          "tag": "Music",
+          "score": 0.625
+        },
+        {
+          "tag": "Synthesizer",
+          "score": 0.603
+        },
+        {
+          "tag": "Musical instrument",
+          "score": 0.327
+        }
+      ],
+      "label_status": "ok",
+      "asr": null
+    },
+    {
+      "start": 23.936,
+      "end": 26.35,
+      "labels": [
+        {
+          "tag": "Speech",
+          "score": 0.908
+        }
+      ],
+      "label_status": "ok",
+      "asr": {
+        "text": "帮我把这段的谱子扒出来。",
+        "lang": "zh",
+        "confidence": "n/a"
+      }
+    }
+  ],
+  "global": {
+    "speech_ratio": 0.564
+  },
+  "tools": {
+    "vad": "ok",
+    "audio_tagging": "ok",
+    "asr": "ok"
+  },
+  "gaps": [
+    "0.00–1.98s 为非语音段（Music、Synthesizer），只知类别、不知内容（无音高 / 谱面 / 歌词）",
+    "4.54–6.62s 为非语音段，但分类置信度过低（top 0.125 < 阈值 0.30）→ 无法判定类别",
+    "8.93–10.75s 为非语音段（Synthesizer、Music），只知类别、不知内容（无音高 / 谱面 / 歌词）",
+    "13.25–15.17s 为非语音段，但分类置信度过低（top 0.253 < 阈值 0.30）→ 无法判定类别",
+    "17.70–19.55s 为非语音段，但分类置信度过低（top 0.139 < 阈值 0.30）→ 无法判定类别",
+    "22.11–23.94s 为非语音段（Music、Synthesizer），只知类别、不知内容（无音高 / 谱面 / 歌词）",
+    "结构事实：非语音段位于时间轴前部、语音段在后（指令在后）"
+  ],
+  "capabilities_available": [
+    "pitch_transcribe",
+    "chord_recognize",
+    "source_separate",
+    "denoise",
+    "speaker_id",
+    "music_id",
+    "transcribe_segment"
+  ],
+  "timings_ms": {
+    "vad": 77,
+    "tagging": 284,
+    "asr": 486
+  },
+  "source": {
+    "tier": "cpu",
+    "engine": "silero-vad+sensevoice-int8+zipformer-tagging-int8",
+    "engine_version": "2026-09-20",
+    "generated_at": "2026-09-20T14:03:03+08:00",
+    "degraded": false,
+    "params": {
+      "label_confidence_threshold": 0.3,
+      "language": "auto"
+    }
+  }
+}

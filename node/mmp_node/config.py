@@ -55,7 +55,9 @@ class BrokerSection(BaseModel):
 
 class EngineSection(BaseModel):
     module: str
-    cmd: list[str] | None = None
+    python: str | None = None          # 引擎自己的解释器（conda 环境）；默认与 A 相同
+    cmd: list[str] | None = None       # 完整命令覆盖；默认 [python, -m, module]
+    env: dict[str, str] = {}           # 追加给子进程的环境变量（如 MMP_MODELS_DIR）
     timeout_sec: float = 30
     max_concurrency: dict[str, int] | int | None = None
 

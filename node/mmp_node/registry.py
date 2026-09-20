@@ -20,6 +20,7 @@ class EngineSpec:
     cwd: Path
     timeout_sec: float
     capabilities: list[dict]          # 该引擎提供的任务类型
+    env: dict[str, str] = field(default_factory=dict)
     # (task_type, tier) → TierSpec；同一引擎可以提供多个类型的多个档
     tiers: dict[tuple[str, str], dict] = field(default_factory=dict)
 
@@ -53,9 +54,9 @@ class Registry:
                     t["max_concurrency"] = sec.max_concurrency
                 elif isinstance(sec.max_concurrency, dict) and t["tier"] in sec.max_concurrency:
                     t["max_concurrency"] = sec.max_concurrency[t["tier"]]
-        cmd = sec.cmd or [sys.executable, "-m", sec.module]
+        cmd = sec.cmd or [sec.python or sys.executable, "-m", sec.module]
         return EngineSpec(name=name, module=sec.module, cmd=cmd, cwd=engines_dir,
-                          timeout_sec=sec.timeout_sec, capabilities=caps)
+                          timeout_sec=sec.timeout_sec, capabilities=caps, env=dict(sec.env))
 
     # ---- 查询 ----
     def capability(self, task_type: str) -> dict:
@@ -95,3 +96,6 @@ class Registry:
 
     def capabilities(self) -> list[dict]:
         return list(self.types.values())
+
+    def output_schema(self, task_type: str):
+        return self.capability(task_type).get("output_schema")

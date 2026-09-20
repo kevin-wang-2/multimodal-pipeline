@@ -18,7 +18,7 @@ FIXTURES = PROTOCOL / "fixtures"
 
 
 def load_schemas() -> dict[str, dict]:
-    return {p.name.removesuffix(".schema.json"): json.loads(p.read_text()) for p in sorted(SCHEMAS.glob("*.schema.json"))}
+    return {p.name.removesuffix(".schema.json"): json.loads(p.read_text(encoding="utf-8")) for p in sorted(SCHEMAS.glob("*.schema.json"))}
 
 
 def build_registry(schemas: dict[str, dict]) -> Registry:

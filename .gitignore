@@ -35,3 +35,5 @@ node/node.toml
 *.sqlite-shm
 .pytest_cache/
 *.egg-info/
+node/.smoke-cache/
+ci-out/

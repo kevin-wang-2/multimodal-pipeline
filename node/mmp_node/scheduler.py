@@ -20,6 +20,7 @@ from .errors import ApiError
 from .jobs import PRIORITY_RANK, Job
 from .media import MediaStore
 from .registry import Registry
+from . import schemas
 
 log = logging.getLogger("mmp.sched")
 
@@ -53,9 +54,12 @@ class Scheduler:
         if self._loop_task:
             self._loop_task.cancel()
             self._loop_task = None
-        for j in list(self._running.values()):
-            if j.task:
-                j.task.cancel()
+        tasks = [j.task for j in list(self._running.values()) if j.task]
+        for t in tasks:
+            t.cancel()
+        # 等任务真正收尾（它们的 except/finally 还会跟引擎进程说话），再让 EnginePool 关进程
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     # ---- 队列 ----
     @property
@@ -178,7 +182,8 @@ class Scheduler:
             }
             if degraded_reason:
                 job.source["degraded_reason"] = degraded_reason
-            await self._place_result(job, res.result)
+            result = self._finish_result(job, res.result)
+            await self._place_result(job, result)
             self.cache.put(task_key(job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"], job.params),
                            job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
                            job.source, job.result, job.result_ref, job.timings_ms)
@@ -201,6 +206,22 @@ class Scheduler:
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
                                  "tier": job.tier["tier"], "degraded": degraded_reason, "cached": False,
                                  "timings_ms": job.timings_ms}, ensure_ascii=False))
+
+    def _finish_result(self, job: Job, result: object) -> object:
+        """digest 类型：A 补 source、按 tools 判部分失败；所有类型：按 output_schema 校验，不合格算 engine_failed。"""
+        out_schema = self.registry.output_schema(job.task_type)
+        if out_schema == schemas.DIGEST_ID and isinstance(result, dict):
+            tools = result.get("tools") or {}
+            if any(v in ("failed", "partial") for v in tools.values()) and not job.source["degraded"]:
+                job.source["degraded"] = True
+                job.source["degraded_reason"] = "partial_failure"
+            result["source"] = job.source
+        v = schemas.validator_for(out_schema)
+        if v is not None:
+            errs = schemas.errors(v, result)
+            if errs:
+                raise ApiError("engine_failed", f"engine output violates {out_schema if isinstance(out_schema, str) else 'output_schema'}: " + "; ".join(errs[:3]))
+        return result
 
     async def _place_result(self, job: Job, result: object) -> None:
         """结果内联；超限且有 put 端点则 PUT 过去只留引用。"""

@@ -52,6 +52,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
 - [ ] **M1 infra 骨架**：A 的队列 / 缓存 / 引擎池 + 出站 ws；B 协议 + py/ts 两个实现；C 的 ts 包。只挂两个任务类型：`triage.audio`（CPU）与 `ocr.structured`（GPU）。步骤见 [docs/实施计划.md](docs/实施计划.md)。
   - [x] S0 协议定稿（2026-09-19）：[docs/协议.md](docs/协议.md) + `protocol/`，py / ts 契约测试全绿。
   - [x] S1 A 核心 + B-py 绑定模式 + CI（2026-09-20）：`node/`，`echo` 任务类型跑通队列 / 缓存 / 句柄 / 注册表 / 任务 API，18 项验收测试。
+  - [x] S2 `triage.audio` 引擎（2026-09-20）：三件套跑在子进程，双阈值 VAD 切点 −16ms，26s 素材 847ms（0.68× T2）；`gpu` job 跑真模型冒烟。
 - [ ] M2 能力层（工具注册表 + 首批 head）
 - [ ] M3 预算与反馈升级
 - [ ] M4 模态同构（图片 / 视频复用同一套抽象）
@@ -62,7 +63,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
 |---|---|---|
 | 音频便宜档（CPU） | SenseVoiceSmall int8 + Silero VAD，M1 Mac 上 **21× 实时**，模型合计约 270MB，零 torch，中文词全对 | [T2](docs/结果-T2.md) |
 | 音频 GPU 档 | whisper.cpp 原生 sm_120 构建，**21.8× 实时**；模型加载 0.9s 占短音频总时七成 | [T1](docs/结果-T1.md) |
-| 边界检测 | Silero VAD 切点误差 10ms，7ms / 4.4s | [T1](docs/结果-T1.md) / [T3](docs/结果-T3.md) |
+| 边界检测 | 双阈值 Silero VAD 切点误差 −16ms（sherpa 默认封装 +182ms） | [T2 复测](docs/结果-T2.md) |
 | 端到端盲测 | 只凭 digest 选对 `pitch_transcribe` 并指对 0.00–2.18s | [T4](docs/结果-T4.md) |
 | 文档 OCR 快档（GPU） | PP-OCRv6 **0.4–0.5 s/页**，CER 约 1% | [T5](docs/结果-T5-文档OCR.md) |
 | 文档 OCR 慢档（GPU） | PaddleOCR-VL 0.9B **约 9 s/页、12GB 显存**，出版面结构与印章 | [T5](docs/结果-T5-文档OCR.md) |
@@ -79,7 +80,8 @@ protocol/
 node/
   mmp_node/            A 算力节点：队列、缓存（SQLite）、引擎池（子进程）、注册表、媒体句柄、A↔B 分发
   mmp_broker/          B 的 Python 实现：操作层（core）、HTTP 绑定（FastAPI）、进程内绑定（inproc）
-  engines/             引擎子进程，JSON-lines over stdio；engines/echo 是 S1 的测试引擎
+  engines/             引擎子进程，JSON-lines over stdio；echo（S1 测试引擎）、triage_audio（音频预检，见其 README）
+  tools/               smoke_triage_audio.py：真模型冒烟（CI gpu job）
   tests/               S1 验收测试（经完整栈：HTTP → Broker → 信封 → Node → 子进程）
   node.toml.example    全部阈值外置；MMP_<SECTION>__<KEY> 环境变量覆盖
 .gitea/workflows/      ci.yml（unit：契约 + 验收）、gpu.yml（骨架，等 gpu runner）

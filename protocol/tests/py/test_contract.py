@@ -30,7 +30,7 @@ def test_every_schema_and_def_has_fixtures(schemas):
 def test_fixture(schemas, registry, fixture_case):
     schema_name, defn, expect_valid, path = fixture_case
     validator = make_validator(schemas, registry, schema_name, defn)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
     if expect_valid:
         assert not errors, "\n".join(f"{list(e.path)}: {e.message}" for e in errors)
@@ -40,7 +40,7 @@ def test_fixture(schemas, registry, fixture_case):
 
 def test_m0_digest_sample_is_the_real_hash(registry, schemas):
     """M0 样本回指 testdata/m0_hum_then_speech.wav 的完整 sha256。"""
-    d = json.loads((FIXTURES / "digest/root/valid/m0_hum_then_speech.json").read_text())
+    d = json.loads((FIXTURES / "digest/root/valid/m0_hum_then_speech.json").read_text(encoding="utf-8"))
     assert d["media_id"] == "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1"
     assert d["segments"][0]["label_status"] == "unclassified" and d["segments"][0]["labels"] == []
     assert "caption" not in d.get("global", {})

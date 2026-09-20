@@ -29,7 +29,7 @@ NODE_KEY = "test-node-key-0123456789"
 def _registry() -> RefRegistry:
     reg = RefRegistry()
     for p in SCHEMAS.glob("*.schema.json"):
-        s = json.loads(p.read_text())
+        s = json.loads(p.read_text(encoding="utf-8"))
         reg = reg.with_resource(s["$id"], Resource.from_contents(s, default_specification=DRAFT202012))
     return reg
 
@@ -53,7 +53,7 @@ def assert_valid(v: Draft202012Validator, data) -> None:
 
 
 # ---------- 配置 ----------
-def make_config(tmp_path: Path, **over) -> Config:
+def make_config(tmp_path: Path, engines: dict | None = None, **over) -> Config:
     data = {
         "node": {"id": "t-node", "key": NODE_KEY, "data_dir": str(tmp_path / "cache")},
         "queue": {"max_len": 500, "retry_after_sec": 1},
@@ -61,12 +61,13 @@ def make_config(tmp_path: Path, **over) -> Config:
         "media": {"max_inline_result_bytes": 4096},
         "jobs": {"retention_sec": 3600},
         "broker": {"inflight_grace_sec": 2},
-        "engines": {"echo": {"module": "engines.echo", "timeout_sec": 5}},
+        "engines": engines if engines is not None else {"echo": {"module": "engines.echo", "timeout_sec": 5}},
     }
     for k, v in over.items():
         sec, key = k.split("__")
         if sec == "engines":
-            data["engines"]["echo"][key] = v
+            for e in data["engines"].values():
+                e[key] = v
         else:
             data.setdefault(sec, {})[key] = v
     return Config.model_validate(data)
@@ -100,8 +101,8 @@ class Stack:
         raise AssertionError(f"{job_id} never finished")
 
 
-async def build_stack(tmp_path: Path, api_key: str = "", **over) -> Stack:
-    cfg = make_config(tmp_path, **over)
+async def build_stack(tmp_path: Path, api_key: str = "", engines: dict | None = None, **over) -> Stack:
+    cfg = make_config(tmp_path, engines, **over)
     node = Node(cfg, NODE_DIR)
     await node.start()
     broker = Broker(NODE_KEY, inflight_grace_sec=cfg.broker.inflight_grace_sec)

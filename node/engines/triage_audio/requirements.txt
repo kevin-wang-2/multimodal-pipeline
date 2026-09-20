@@ -1,0 +1,4 @@
+# 引擎子进程自己的环境（与 A 进程隔离）。Python 3.12/3.13；零 torch。
+sherpa-onnx>=1.13
+onnxruntime>=1.18
+numpy>=1.26

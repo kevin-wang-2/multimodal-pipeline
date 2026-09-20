@@ -20,6 +20,7 @@ dependencies = [
 dev = [
   "pytest>=8",
   "pytest-asyncio>=0.23",
+  "numpy>=1.26",          # tests 直接 import 引擎的 vad.py / digest.py 做单测
   "rfc3339-validator>=0.1.4",
   "rfc3986-validator>=0.1.1",
 ]

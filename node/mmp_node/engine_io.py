@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sys
+import os
 import time
 from dataclasses import dataclass
 
@@ -57,6 +57,8 @@ class EngineProcess:
             *self.spec.cmd, cwd=str(self.spec.cwd),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             limit=64 * 1024 * 1024,
+            # 子进程 stdio 一律 utf-8：Windows 默认 GBK 会把 JSON 里的中文编坏
+            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **self.spec.env},
         )
         self._stderr = asyncio.create_task(self._pump_stderr())
         try:
@@ -90,9 +92,9 @@ class EngineProcess:
         try:
             async for raw in self.proc.stdout:
                 try:
-                    msg = json.loads(raw)
-                except json.JSONDecodeError:
-                    log.warning("[%s] non-json stdout: %r", self.spec.name, raw[:200])
+                    msg = json.loads(raw.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                    log.warning("[%s] undecodable stdout line (%s): %r", self.spec.name, e, raw[:200])
                     continue
                 t = msg.get("type")
                 if t == "log":
@@ -179,6 +181,9 @@ class EngineProcess:
         transport = getattr(self.proc, "_transport", None)
         if transport is not None:
             transport.close()
+        # Proactor（Windows）把管道的 connection_lost 放到 call_soon；多转两拍让它在 loop 关闭前跑完
+        for _ in range(3):
+            await asyncio.sleep(0)
 
 
 class EnginePool:
@@ -191,6 +196,7 @@ class EnginePool:
         self._procs: dict[str, EngineProcess] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._reaper: asyncio.Task | None = None
+        self._closing = False
 
     def loaded(self) -> list[str]:
         return sorted(n for n, p in self._procs.items() if p.alive)
@@ -198,6 +204,8 @@ class EnginePool:
     async def get(self, spec: EngineSpec) -> EngineProcess:
         lock = self._locks.setdefault(spec.name, asyncio.Lock())
         async with lock:
+            if self._closing:
+                raise EngineCrashed("engine pool is closing")
             p = self._procs.get(spec.name)
             if p is None or not p.alive:
                 p = EngineProcess(spec, self.start_timeout, self.protocol_version)
@@ -217,7 +225,13 @@ class EnginePool:
                     await p.shutdown()
 
     async def close(self) -> None:
+        """等在途的 start 收尾（调度器用 shield 保护它不被 cancel），再关进程。
+        否则半起的子进程会留给事件循环收尾，Windows Proactor 上 cancel _connect_pipes 会挂死。"""
+        self._closing = True
         if self._reaper:
             self._reaper.cancel()
+        for lock in list(self._locks.values()):
+            async with lock:
+                pass
         await asyncio.gather(*(p.shutdown() for p in self._procs.values()), return_exceptions=True)
         self._procs.clear()

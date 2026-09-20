@@ -73,7 +73,7 @@ class Node:
         task_type = req["type"]
         cap = self.registry.capability(task_type)
         tier = self.registry.resolve_tier(task_type, req.get("tier"))
-        params = req.get("params") or {}
+        params = self._normalize_params(cap, req.get("params") or {})
         self._validate_params(cap, params)
         priority = req.get("priority", "interactive")
         wait_s = float(req.get("wait", 0) if wait is None else wait)
@@ -124,6 +124,16 @@ class Node:
         self._seq += 1
         return Job(job_id=new_job_id(self.node_id), task_type=task_type, priority=priority, tier=tier, params=params,
                    media=media, media_id=media_id, media_path=media_path, key=key, seq=self._seq)
+
+    @staticmethod
+    def _normalize_params(cap: dict, params: dict) -> dict:
+        """补 params_schema 顶层属性的 default：source.params 记录实际生效值，缓存键也不因"省略 vs 写默认值"而分叉。"""
+        schema = cap.get("input", {}).get("params_schema") or {}
+        out = dict(params)
+        for name, prop in (schema.get("properties") or {}).items():
+            if name not in out and isinstance(prop, dict) and "default" in prop:
+                out[name] = prop["default"]
+        return out
 
     def _validate_params(self, cap: dict, params: dict) -> None:
         schema = cap.get("input", {}).get("params_schema")

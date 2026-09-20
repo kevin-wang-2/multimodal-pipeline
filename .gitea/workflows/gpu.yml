@@ -1,4 +1,8 @@
-# gpu：GPU 机上的 windows runner（标签 `windows`，Windows + miniconda，RTX 5070 Ti）。S2 起跑真模型冒烟。
+# gpu：GPU 机上的 windows runner（标签 `windows`，Windows + miniconda，RTX 5070 Ti）。
+# 跑 node 验收（Windows 路径）+ triage.audio 真模型冒烟（M0 素材）。
+# 机器上一次性准备（见 node/engines/triage_audio/README.md）：
+#   conda env mmp-node（py3.12，装 node[dev]）、mmp-audio（py3.12 + sherpa-onnx/onnxruntime/numpy）
+#   C:\mmp\models 三件套、C:\mmp\testdata 两段 M0 素材
 # 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）；说明只写在 YAML 注释里。
 name: gpu
 on:
@@ -14,6 +18,12 @@ jobs:
   smoke:
     runs-on: windows
     timeout-minutes: 30
+    env:
+      PYTHONUTF8: 1
+      PY_NODE: C:\ProgramData\miniconda3\envs\mmp-node\python.exe
+      MMP_ENGINE_PYTHON: C:\ProgramData\miniconda3\envs\mmp-audio\python.exe
+      MMP_MODELS_DIR: C:\mmp\models
+      MMP_SMOKE_WAVS: C:\mmp\testdata
     steps:
       - name: Checkout
         shell: cmd
@@ -29,13 +39,21 @@ jobs:
       - name: GPU visible
         shell: cmd
         run: nvidia-smi
-      - name: Toolchain
+      - name: Install node package into mmp-node env
         shell: cmd
         run: |
           @echo off
-          where python
-          python --version
-          where conda && conda --version
-      - name: Real-model smoke (replaced in S2 by triage.audio on M0 clips)
+          %PY_NODE% --version
+          %PY_NODE% -m pip install -q -e "node[dev]" || exit /b 1
+          %MMP_ENGINE_PYTHON% -c "import sherpa_onnx, onnxruntime; print('engine env ok', sherpa_onnx.__version__)" || exit /b 1
+      - name: Node acceptance on Windows (echo + triage.audio real model)
         shell: cmd
-        run: echo S2 placeholder - triage.audio smoke goes here
+        working-directory: node
+        run: "%PY_NODE%" -m pytest -q -p no:cacheprovider
+      - name: Real-model smoke on M0 clips
+        shell: cmd
+        run: |
+          @echo off
+          if not exist ci-out mkdir ci-out
+          set MMP_SMOKE_DUMP=ci-out
+          %PY_NODE% node\tools\smoke_triage_audio.py || exit /b 1

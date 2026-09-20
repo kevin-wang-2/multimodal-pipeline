@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmp-node"
+version = "0.1.0"
+description = "multimodal-pipeline A 算力节点（mmp_node）与 B 协调节点的 Python 实现（mmp_broker，绑定模式）"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "httpx>=0.27",
+  "pydantic>=2.7",
+  "jsonschema>=4.23",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "rfc3339-validator>=0.1.4",
+  "rfc3986-validator>=0.1.1",
+]
+
+[project.scripts]
+mmp-node = "mmp_broker.main:main"
+
+[tool.setuptools]
+packages = ["mmp_node", "mmp_broker"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

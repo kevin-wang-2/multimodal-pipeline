@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mmp:protocol:1:engine-io",
+  "title": "EngineIo",
+  "description": "A 与引擎子进程之间的 JSON-lines 协议（实施计划 §4.2）。每行一个对象，以 type 区分。A 内部使用，不暴露给 B / C；引擎只依赖标准库即可实现。媒体以本机临时文件路径传给引擎——这是进程内的实现细节，不是媒体句柄契约的一部分。",
+  "type": "object",
+  "properties": {
+    "type": { "type": "string", "enum": ["hello", "run", "cancel", "shutdown", "result", "error", "log"] }
+  },
+  "required": ["type"],
+  "oneOf": [
+    { "$ref": "#/$defs/Hello" },
+    { "$ref": "#/$defs/Run" },
+    { "$ref": "#/$defs/Cancel" },
+    { "$ref": "#/$defs/Shutdown" },
+    { "$ref": "#/$defs/Result" },
+    { "$ref": "#/$defs/Error" },
+    { "$ref": "#/$defs/Log" }
+  ],
+  "$defs": {
+    "ReqId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "Hello": {
+      "description": "引擎→A。启动后的第一行；A 收到前不发任务。engine_version 必须与注册表一致，否则 A 拒绝该引擎。",
+      "type": "object",
+      "properties": {
+        "type": { "const": "hello" },
+        "engine": { "type": "string", "minLength": 1 },
+        "engine_version": { "type": "string", "minLength": 1 },
+        "protocol_version": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/ProtocolVersion" }
+      },
+      "required": ["type", "engine", "engine_version", "protocol_version"],
+      "additionalProperties": false
+    },
+    "Run": {
+      "description": "A→引擎。一个任务；同一进程内可有多个在途 run，以 id 配对。",
+      "type": "object",
+      "properties": {
+        "type": { "const": "run" },
+        "id": { "$ref": "#/$defs/ReqId" },
+        "job": {
+          "type": "object",
+          "properties": {
+            "job_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/JobId" },
+            "task_type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+            "tier": { "$ref": "urn:mmp:protocol:1:capability#/$defs/Tier" },
+            "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+            "media_path": { "description": "本机文件路径；input.media=none 的类型省略。", "type": "string", "minLength": 1 },
+            "params": { "type": "object" },
+            "timeout_sec": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "required": ["job_id", "task_type", "tier", "media_id", "params"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "id", "job"],
+      "additionalProperties": false
+    },
+    "Cancel": {
+      "description": "A→引擎。尽力而为；引擎随后以 error{cancelled} 或 result 收尾。",
+      "type": "object",
+      "properties": { "type": { "const": "cancel" }, "id": { "$ref": "#/$defs/ReqId" } },
+      "required": ["type", "id"],
+      "additionalProperties": false
+    },
+    "Shutdown": {
+      "description": "A→引擎。引擎应尽快退出；A 超时后 kill。显存释放唯一可靠的方式是结束进程。",
+      "type": "object",
+      "properties": { "type": { "const": "shutdown" } },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "Result": {
+      "description": "引擎→A。result 是该任务类型 output_schema 的实例（digest 由引擎组装，A 只补 source）。",
+      "type": "object",
+      "properties": {
+        "type": { "const": "result" },
+        "id": { "$ref": "#/$defs/ReqId" },
+        "result": {},
+        "timings_ms": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+      },
+      "required": ["type", "id", "result"],
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "error" },
+        "id": { "$ref": "#/$defs/ReqId" },
+        "error": { "type": "string", "enum": ["engine_failed", "bad_params", "cancelled"] },
+        "message": { "type": "string" }
+      },
+      "required": ["type", "id", "error"],
+      "additionalProperties": false
+    },
+    "Log": {
+      "description": "引擎→A。结构化日志；引擎也可以直接写 stderr。",
+      "type": "object",
+      "properties": {
+        "type": { "const": "log" },
+        "level": { "type": "string", "enum": ["debug", "info", "warning", "error"] },
+        "message": { "type": "string" }
+      },
+      "required": ["type", "level", "message"],
+      "additionalProperties": false
+    }
+  }
+}

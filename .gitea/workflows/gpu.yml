@@ -1,0 +1,15 @@
+# gpu：打 `gpu` 标签的 runner（GPU 机）。S2 起跑真模型冒烟。
+# 目前实例上还没有 gpu runner，先只允许手动触发；runner 就位后把 on 改成 push 到 main 且 paths 含 node/engines/**。
+name: gpu
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: gpu
+    steps:
+      - uses: actions/checkout@v4
+      - name: GPU 可见
+        run: nvidia-smi
+      - name: 真模型冒烟（S2 接入 triage.audio 后替换）
+        run: echo "S2 起跑真模型冒烟：M0 素材 → digest → schema 校验 + 耗时上限"

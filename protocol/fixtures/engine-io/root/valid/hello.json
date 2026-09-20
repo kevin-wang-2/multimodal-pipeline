@@ -1,0 +1,6 @@
+{
+  "type": "hello",
+  "engine": "echo",
+  "engine_version": "1",
+  "protocol_version": "1.0"
+}

@@ -1,0 +1,38 @@
+# unit：任意 runner。协议契约测试（py + ts）+ A / B-py 验收测试（echo 引擎，无模型）。
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安装 node 包与契约测试依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "node[dev]" -r protocol/tests/py/requirements.txt
+      - name: 契约测试（jsonschema）
+        run: python -m pytest -q
+        working-directory: protocol/tests/py
+      - name: A 核心 + B-py 绑定模式验收
+        run: python -m pytest -q
+        working-directory: node
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 契约测试（ajv）
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+        working-directory: protocol/tests/ts

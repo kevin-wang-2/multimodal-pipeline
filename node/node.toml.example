@@ -1,0 +1,45 @@
+# A 算力节点 + 绑定模式 B 的配置。复制为 node.toml；任意键可用环境变量覆盖：
+#   MMP_<SECTION>__<KEY>，如 MMP_BROKER__PORT=9000、MMP_NODE__KEY=...
+# 所有阈值都在这里，代码里没有魔法数字。
+
+[node]
+id = "mac-m1"                       # ^[a-z0-9][a-z0-9-]{0,62}$；job_id 的前缀
+key = "change-me-to-a-long-random-secret"   # register 用的节点密钥，≥16 字符
+protocol_version = "1.0"
+data_dir = "./cache"                # 媒体临时文件、SQLite 都放这里
+
+[queue]
+max_len = 200                       # 超过 → 429 backpressure
+retry_after_sec = 5                 # 429 时给 C 的建议
+
+[scheduler]
+vram_total_mb = 0                   # 0 = 无 GPU；引擎 tier 的 vram_mb 之和不得超过它
+idle_unload_sec = 300               # 引擎空闲多久后 kill 子进程（显存释放 = 结束进程）
+engine_start_timeout_sec = 120      # 等 hello 的时限（VLM 冷加载约 76s）
+
+[media]
+max_inline_bytes = 8388608          # 8 MiB，协议规定
+max_fetch_bytes = 268435456         # get 端点最多拉 256 MiB
+fetch_timeout_sec = 60
+max_inline_result_bytes = 1048576   # 结果超过 1 MiB 且有 put 端点 → PUT 过去
+use_env_proxy = false               # 取放媒体是否遵守 HTTP(S)_PROXY / ALL_PROXY；内网句柄一般不该走代理
+
+[cache]
+path = "results.sqlite"             # 相对 data_dir
+
+[jobs]
+retention_sec = 3600                # 终态任务保留多久可 GET
+
+[broker]
+enabled = true
+host = "127.0.0.1"                  # 只绑内网 / 本机地址；A 零公网监听
+port = 8765
+api_key = ""                        # 非空时 C→B 需 Authorization: Bearer <api_key>
+inflight_grace_sec = 5              # 在途超时 = wait + 这个
+
+# 每个启用的引擎一节。module 的 CAPABILITY 给出任务类型元数据；这里只放部署相关的覆盖。
+[engines.echo]
+module = "engines.echo"             # python -m <module>，cwd = node/
+# cmd = ["/path/to/conda/env/bin/python", "-m", "engines.echo"]   # 引擎自己的解释器
+timeout_sec = 30                    # 单任务时限；超时且无更便宜档 → 504 timeout
+# max_concurrency = 2               # 覆盖 CAPABILITY.tiers[].max_concurrency（按 tier 名）

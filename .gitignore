@@ -29,3 +29,9 @@ models/
 AGENTS.md.local
 CLAUDE.local.md
 .pytest_cache/
+node/node.toml
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.pytest_cache/
+*.egg-info/

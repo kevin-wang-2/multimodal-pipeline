@@ -45,7 +45,7 @@ jobs:
       - name: Node acceptance on Windows (echo + triage.audio real model)
         shell: cmd
         working-directory: node
-        run: "%PY_NODE%" -m pytest -q -p no:cacheprovider
+        run: '%PY_NODE% -m pytest -q -p no:cacheprovider'
       - name: Real-model smoke on M0 clips
         shell: cmd
         run: |

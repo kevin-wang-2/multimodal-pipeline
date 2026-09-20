@@ -1,5 +1,6 @@
-# gpu：打 `gpu` 标签的 runner（GPU 机）。S2 起跑真模型冒烟。
+# gpu：打 `gpu` 标签的 runner（GPU 机，Windows + miniconda）。S2 起跑真模型冒烟。
 # 目前实例上还没有 gpu runner，先只允许手动触发；runner 就位后把 on 改成 push 到 main 且 paths 含 node/engines/**。
+# 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）。
 name: gpu
 on:
   workflow_dispatch:
@@ -7,9 +8,22 @@ on:
 jobs:
   smoke:
     runs-on: gpu
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - name: GPU 可见
+      - name: Checkout
+        shell: cmd
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          @echo off
+          git init -q .
+          git remote remove origin 2>nul
+          git remote add origin %GITHUB_SERVER_URL%/%GITHUB_REPOSITORY%.git
+          git -c http.extraHeader="Authorization: token %TOKEN%" fetch -q --depth 1 origin %GITHUB_SHA%
+          git checkout -q -f FETCH_HEAD
+      - name: GPU visible
+        shell: cmd
         run: nvidia-smi
-      - name: 真模型冒烟（S2 接入 triage.audio 后替换）
-        run: echo "S2 起跑真模型冒烟：M0 素材 → digest → schema 校验 + 耗时上限"
+      - name: Real-model smoke (replaced in S2 by triage.audio on M0 clips)
+        shell: cmd
+        run: echo S2 placeholder - triage.audio smoke goes here

@@ -8,10 +8,6 @@ name: gpu
 on:
   push:
     branches: [main]
-    paths:
-      - "node/**"
-      - "protocol/**"
-      - ".gitea/workflows/gpu.yml"
   workflow_dispatch:
 
 jobs:

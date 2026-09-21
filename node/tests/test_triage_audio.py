@@ -135,3 +135,30 @@ async def test_triage_audio_end_to_end(tmp_path):
         assert r3.status_code == 400 and r3.json()["error"] == "bad_request"
     finally:
         await s.client.aclose(); await s.link.close(); await s.node.close()
+
+
+# ---------- 真实音频样本 #1 暴露的两条规则 ----------
+def test_vad_does_not_merge_by_default_and_short_gap_is_surfaced():
+    """一句话被 230ms 的风噪切成两半：默认不合并（合并会抹掉夹在中间的短事件，如一声口哨）；digest 的 gaps 把它点出来。"""
+    p = VadParams(on_threshold=0.2, off_threshold=0.5, min_speech_sec=0.1, min_silence_sec=0.2, onset_pad_sec=0)
+    probs = np.array([0.9] * 30 + [0.1] * 8 + [0.9] * 30, dtype=np.float32)          # 8 帧 = 256ms 空隙
+    assert len(speech_segments(probs, len(probs) * HOP_SEC, p)) == 2
+    assert len(speech_segments(probs, len(probs) * HOP_SEC, VadParams(**{**p.__dict__, "merge_gap_sec": 0.5}))) == 1   # 显式打开才合并
+    segs = [RawSegment(0.0, 1.0, True, labels=[{"tag": "Speech", "score": 0.99}], asr={"text": "听听我的绝对音感准不准", "lang": "zh", "confidence": 0.99}),
+            RawSegment(1.0, 1.3, False, labels=[{"tag": "Whistling", "score": 0.8}]),
+            RawSegment(1.3, 2.0, True, labels=[{"tag": "Speech", "score": 0.99}], asr={"text": "这个是A吧", "lang": "zh", "confidence": 0.99})]
+    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, [], {})
+    assert_valid(V_DIGEST, with_source(d))
+    assert len(d["segments"]) == 3 and d["segments"][1]["labels"][0]["tag"] == "Whistling"   # 口哨没被抹掉
+    assert any("300ms，Whistling）夹在两段语音之间" in g for g in d["gaps"])
+
+
+def test_low_speech_confidence_asr_is_flagged_in_gaps():
+    """喷麦被 VAD 判为语音、SenseVoice 幻觉出 "Yeah."：asr.confidence 用打标 Speech 分数，低于阈值进 gaps。"""
+    segs = [RawSegment(0.61, 1.09, True, labels=[{"tag": "Sound effect", "score": 0.345}], asr={"text": "Yeah.", "lang": "en", "confidence": 0.0}),
+            RawSegment(1.09, 4.0, True, labels=[{"tag": "Speech", "score": 0.996}], asr={"text": "帮我", "lang": "zh", "confidence": 0.996})]
+    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, [], {})
+    assert_valid(V_DIGEST, with_source(d))
+    assert d["segments"][0]["asr"]["confidence"] == 0.0 and d["segments"][1]["asr"]["confidence"] == 0.996
+    assert any("不可靠" in g and "Yeah." in g for g in d["gaps"])
+    assert not any("帮我" in g for g in d["gaps"])

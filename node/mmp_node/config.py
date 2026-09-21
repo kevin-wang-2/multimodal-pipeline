@@ -36,6 +36,9 @@ class MediaSection(BaseModel):
     max_inline_result_bytes: int = 1024 * 1024
     use_env_proxy: bool = False
     max_store_bytes: int = 2 * 1024 * 1024 * 1024   # 媒体目录上限，LRU 淘汰；在跑的任务 pin 住
+    transcode_audio: bool = True                     # modal=audio 的任务：非 PCM WAV 先用 ffmpeg 转 16k 单声道 WAV
+    ffmpeg: str = "ffmpeg"                           # 可执行名或绝对路径
+    transcode_timeout_sec: float = 120
 
 
 class CacheSection(BaseModel):

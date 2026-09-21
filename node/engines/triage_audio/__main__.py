@@ -135,7 +135,10 @@ def triage(m: Models, media_id: str, path: str, params: dict) -> dict:
                 st.accept_waveform(SR, np.ascontiguousarray(x[int(s.start * SR):int(s.end * SR)]))
                 rec.decode_stream(st)
                 r = st.result
-                s.asr = {"text": r.text.strip(), "lang": (getattr(r, "lang", "") or "").strip("<>|") or "n/a"}
+                # SenseVoice 不给置信度；用打标里 Speech 的分数当代理：VAD 说是语音但打标没听到 Speech 的段（喷麦、呼吸）常被幻觉成一两个词
+                speech_score = max((l["score"] for l in s.labels if l["tag"] == "Speech"), default=0.0)
+                s.asr = {"text": r.text.strip(), "lang": (getattr(r, "lang", "") or "").strip("<>|") or "n/a",
+                         "confidence": round(float(speech_score), 3)}
             except Exception as e:
                 log(f"asr failed on {s.start}-{s.end}: {e!r}", "error")
                 s.asr_failed = True

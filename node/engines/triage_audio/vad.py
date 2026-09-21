@@ -22,6 +22,8 @@ class VadParams:
     min_speech_sec: float = 0.25
     min_silence_sec: float = 0.25
     onset_pad_sec: float = HOP_SEC   # 起点回补一帧：概率在窗内上升，窗起点晚于真实起音
+    merge_gap_sec: float = 0.0       # >0 时把间隔更短的语音段合并。默认关：合并发生在打标之前，会抹掉夹在两句话之间的短事件
+                                     # （"听听我的绝对音感准不准 [一声口哨] 这个是 A 吧"）。短间隔改由 digest 的 gaps 点出来，交上层判断。
 
 
 class SileroVad:
@@ -82,6 +84,10 @@ def speech_segments(probs: np.ndarray, duration_sec: float, p: VadParams) -> lis
             continue
         st = max(0.0, s * HOP_SEC - p.onset_pad_sec, out[-1][1] if out else 0.0)
         en = min(duration_sec, e * HOP_SEC)
-        if en > st:
+        if en <= st:
+            continue
+        if p.merge_gap_sec > 0 and out and st - out[-1][1] < p.merge_gap_sec:
+            out[-1] = (out[-1][0], round(en, 3))     # 句内停顿：并入前一段
+        else:
             out.append((round(st, 3), round(en, 3)))
     return out

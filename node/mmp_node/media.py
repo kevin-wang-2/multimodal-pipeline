@@ -53,6 +53,17 @@ class MediaStore:
     def _path(self, media_id: str) -> Path:
         return self.dir / media_id.split(":", 1)[1]
 
+    def derived_path(self, media_id: str, suffix: str) -> Path:
+        """原媒体的派生物（如转码后的 16k WAV）：derived/<hex>.<suffix>，随原文件一起淘汰。"""
+        return self.dir / "derived" / f"{media_id.split(':', 1)[1]}.{suffix}"
+
+    def _unlink_with_derived(self, media_id: str) -> None:
+        self._path(media_id).unlink(missing_ok=True)
+        d = self.dir / "derived"
+        if d.is_dir():
+            for f in d.glob(media_id.split(":", 1)[1] + ".*"):
+                f.unlink(missing_ok=True)
+
     def _reconcile(self) -> None:
         """启动时把索引与目录对齐：文件没了删索引，索引没了补一条（大小从文件取）。"""
         rows = {r[0] for r in self.db.execute("SELECT media_id FROM media")}
@@ -61,6 +72,8 @@ class MediaStore:
                 self.db.execute("DELETE FROM media WHERE media_id=?", (mid,))
         now = time.time()
         for f in self.dir.iterdir():
+            if f.is_dir():
+                continue          # derived/
             if f.suffix == ".part":
                 f.unlink(missing_ok=True)
                 continue
@@ -119,7 +132,7 @@ class MediaStore:
             if mid in self._pins:
                 continue
             try:
-                self._path(mid).unlink(missing_ok=True)
+                self._unlink_with_derived(mid)
             except OSError as e:  # Windows 上被引擎打开着 → 下次再说
                 log.warning("evict %s failed: %s", mid, e)
                 continue

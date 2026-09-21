@@ -20,7 +20,7 @@ from .errors import ApiError
 from .jobs import PRIORITY_RANK, Job
 from .media import MediaStore
 from .registry import Registry
-from . import schemas
+from . import schemas, transcode
 
 log = logging.getLogger("mmp.sched")
 
@@ -156,13 +156,14 @@ class Scheduler:
         t0 = time.monotonic()
         degraded_reason: str | None = None
         try:
+            media_path = await self._normalize_media(job)
             while True:
                 spec = self.registry.engine_for(job.task_type, job.tier["tier"])
                 proc = await asyncio.shield(self.pool.get(spec))
                 run_job = {"job_id": job.job_id, "task_type": job.task_type, "tier": job.tier["tier"],
                            "media_id": job.media_id, "params": job.params}
-                if job.media_path is not None:
-                    run_job["media_path"] = str(job.media_path)
+                if media_path is not None:
+                    run_job["media_path"] = str(media_path)
                 try:
                     res = await proc.run(run_job, spec.timeout_sec)
                     break
@@ -208,6 +209,25 @@ class Scheduler:
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
                                  "tier": job.tier["tier"], "degraded": degraded_reason, "cached": False,
                                  "timings_ms": job.timings_ms}, ensure_ascii=False))
+
+    async def _normalize_media(self, job: Job):
+        """modal=audio 的任务：非 PCM WAV 先转 16k 单声道 WAV（ffmpeg），派生文件跟原媒体一起缓存。其他模态原样。"""
+        if job.media_path is None or not self.cfg.media.transcode_audio:
+            return job.media_path
+        if self.registry.capability(job.task_type).get("modal") != "audio" or not transcode.needs_transcode(job.media_path):
+            return job.media_path
+        dst = self.media.derived_path(job.media_id, "16k.wav")
+        if dst.exists():
+            job.timings_ms["transcode"] = 0
+            return dst
+        ffmpeg = transcode.find_ffmpeg(self.cfg.media.ffmpeg)
+        if ffmpeg is None:
+            raise ApiError("bad_request", "audio is not PCM WAV and this node has no ffmpeg to transcode it; submit 16 kHz mono WAV")
+        t0 = time.monotonic()
+        await transcode.to_wav16k(job.media_path, dst, ffmpeg, self.cfg.media.transcode_timeout_sec)
+        job.timings_ms["transcode"] = int((time.monotonic() - t0) * 1000)
+        log.info("transcoded %s → %s in %d ms", job.media_id, dst.name, job.timings_ms["transcode"])
+        return dst
 
     def _finish_result(self, job: Job, result: object) -> object:
         """digest 类型：A 补 source、按 tools 判部分失败；所有类型：按 output_schema 校验，不合格算 engine_failed。"""

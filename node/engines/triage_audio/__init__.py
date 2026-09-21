@@ -4,7 +4,7 @@
 """
 
 ENGINE = "silero-vad+sensevoice-int8+zipformer-tagging-int8"
-ENGINE_VERSION = "2026-09-20"          # 模型组合或后处理规则变了就改；进缓存键
+ENGINE_VERSION = "2026-09-21"          # 模型组合或后处理规则变了就改；进缓存键。21：句内停顿合并、asr.confidence=打标 Speech 分数
 
 # M2 之前先给固定清单（T4 盲测用的那 7 项）；M2 起由注册表按媒体特征筛。
 CAPABILITIES_AVAILABLE = ["pitch_transcribe", "chord_recognize", "source_separate",

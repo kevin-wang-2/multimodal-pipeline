@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 MIN_GAP_SEC = 0.05     # 语音段之间小于这个的空隙不单独成段
+SHORT_GAP_SEC = 0.6    # 夹在两段语音之间、短于此的非语音段：可能是句内停顿，也可能是有内容的短事件（一声口哨）——点出来，不替上层判断
 
 
 @dataclass
@@ -73,6 +74,9 @@ def build_digest(media_id: str, duration: float, segs: list[RawSegment], tools: 
                 seg["asr"] = asr
                 if not asr["text"].strip():
                     gaps.append(f"{span} 为语音段，但 ASR 无输出 → 内容未知")
+                elif isinstance(asr["confidence"], (int, float)) and asr["confidence"] < threshold:
+                    top_txt = f"{s.labels[0]['tag']} {s.labels[0]['score']:.2f}" if s.labels else "无"
+                    gaps.append(f"{span} 被 VAD 判为语音，但打标未见 Speech（top {top_txt}）→ ASR 文本「{asr['text']}」不可靠，可能是喷麦 / 呼吸")
             else:
                 gaps.append(f"{span} 为语音段，但 ASR 失败 → 内容未知")
         else:
@@ -86,6 +90,14 @@ def build_digest(media_id: str, duration: float, segs: list[RawSegment], tools: 
                 cats = "、".join(l["tag"] for l in kept[:2])
                 gaps.append(f"{span} 为非语音段（{cats}），只知类别、不知内容（无音高 / 谱面 / 歌词）")
         out_segs.append(seg)
+
+    # 夹在两段语音中间的短非语音段：不合并（合并会抹掉内容），但明确指出它的位置与标签
+    for i in range(1, len(segs) - 1):
+        s = segs[i]
+        if not s.speech and segs[i - 1].speech and segs[i + 1].speech and (s.end - s.start) < SHORT_GAP_SEC:
+            kept = [l for l in s.labels if l["score"] >= threshold]
+            what = "、".join(l["tag"] for l in kept[:2]) if kept else "类别无法判定"
+            gaps.append(f"结构事实：{_fmt(s.start)}–{_fmt(s.end)}s（{int((s.end - s.start) * 1000)}ms，{what}）夹在两段语音之间——可能只是停顿，也可能是有内容的短事件，前后两段语音可能是同一句话")
 
     # 结构事实（T4 观察①）：非语音在前、语音在后 → 指令可能指向前面那段。任务无关，不猜意图。
     first_speech = next((i for i, s in enumerate(segs) if s.speech), None)

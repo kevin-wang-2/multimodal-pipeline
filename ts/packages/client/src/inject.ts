@@ -24,6 +24,7 @@ export function renderDigest(d: Digest, o: RenderOptions = {}): string {
     `media=${d.media_id} kind=${d.kind} duration=${fmt(d.duration_sec)}s engine=${src.engine} tier=${src.tier} degraded=${src.degraded ? (src.degraded_reason ?? "yes") : "no"}`];
   if (src.degraded) head.push(`⚠ 本次预检降级（${src.degraded_reason ?? "unknown"}）：结果不完整，按需重新分析。`);
 
+  const threshold = typeof (src.params as any)?.label_confidence_threshold === "number" ? (src.params as any).label_confidence_threshold : 0.3;
   const lines: string[] = [];
   lines.push(`时间轴（秒，[start,end)）：`);
   const segs = d.segments;
@@ -32,7 +33,9 @@ export function renderDigest(d: Digest, o: RenderOptions = {}): string {
     const span = `[${fmt(s.start)}, ${fmt(s.end)})`;
     if (s.asr && typeof s.asr === "object") {
       const lang = s.asr.lang && s.asr.lang !== "n/a" ? ` (${s.asr.lang})` : "";
-      return `- ${span} 语音：「${s.asr.text}」${lang}`;
+      // asr.confidence 是打标 Speech 分数的代理（triage.audio 引擎）；低于阈值 = VAD 判语音但打标没听到 Speech，多半是喷麦 / 呼吸被幻觉成词
+      const low = typeof s.asr.confidence === "number" && s.asr.confidence < threshold;
+      return low ? `- ${span} 语音（低置信，可能是喷麦 / 呼吸）：「${s.asr.text}」${lang}` : `- ${span} 语音：「${s.asr.text}」${lang}`;
     }
     if (s.asr === undefined) return `- ${span} 语音：ASR 失败，内容未知`;
     const labels = s.label_status === "ok"

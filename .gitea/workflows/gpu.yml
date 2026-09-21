@@ -23,7 +23,7 @@ jobs:
       MMP_MODELS_DIR: C:\mmp\models
       MMP_SMOKE_WAVS: C:\mmp\testdata
       MMP_OCR_PYTHON: C:\ProgramData\miniconda3\envs\ocrlab\python.exe
-      MMP_OCR_INVOICES: C:\Users\Admin\ocrlab\out\inv
+      MMP_OCR_INVOICES: C:\mmp\invoices
       PADDLE_PDX_CACHE_HOME: C:\mmp\paddlex
       PADDLE_PDX_MODEL_SOURCE: modelscope
     steps:

@@ -41,7 +41,7 @@
       "asr": {
         "text": "帮我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.769
       }
     },
     {
@@ -64,7 +64,7 @@
       "asr": {
         "text": "我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.436
       }
     },
     {
@@ -96,7 +96,7 @@
       "asr": {
         "text": "帮我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.804
       }
     },
     {
@@ -119,7 +119,7 @@
       "asr": {
         "text": "帮我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.846
       }
     },
     {
@@ -142,7 +142,7 @@
       "asr": {
         "text": "帮我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.759
       }
     },
     {
@@ -178,7 +178,7 @@
       "asr": {
         "text": "帮我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.908
       }
     }
   ],
@@ -209,15 +209,15 @@
     "transcribe_segment"
   ],
   "timings_ms": {
-    "vad": 77,
-    "tagging": 284,
-    "asr": 486
+    "vad": 79,
+    "tagging": 436,
+    "asr": 649
   },
   "source": {
     "tier": "cpu",
     "engine": "silero-vad+sensevoice-int8+zipformer-tagging-int8",
-    "engine_version": "2026-09-20",
-    "generated_at": "2026-09-20T14:03:03+08:00",
+    "engine_version": "2026-09-21",
+    "generated_at": "2026-09-21T16:51:25+08:00",
     "degraded": false,
     "params": {
       "label_confidence_threshold": 0.3,

@@ -41,7 +41,7 @@
       "asr": {
         "text": "帮我把这段的谱子扒出来。",
         "lang": "zh",
-        "confidence": "n/a"
+        "confidence": 0.913
       }
     }
   ],
@@ -67,15 +67,15 @@
     "transcribe_segment"
   ],
   "timings_ms": {
-    "vad": 15,
-    "tagging": 64,
-    "asr": 62
+    "vad": 13,
+    "tagging": 72,
+    "asr": 102
   },
   "source": {
     "tier": "cpu",
     "engine": "silero-vad+sensevoice-int8+zipformer-tagging-int8",
-    "engine_version": "2026-09-20",
-    "generated_at": "2026-09-20T14:03:02+08:00",
+    "engine_version": "2026-09-21",
+    "generated_at": "2026-09-21T16:51:23+08:00",
     "degraded": false,
     "params": {
       "label_confidence_threshold": 0.3,

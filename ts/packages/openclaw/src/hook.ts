@@ -5,12 +5,13 @@
 export const DIGEST_MARK = "[mmp:digest start]";
 export const UNAVAILABLE_MARK = "[mmp:digest unavailable]";
 
-const AUDIO_BLOCK = /\[Audio(?:\s+\d+\/\d+)?\]/;
+// OpenClaw 按魔数分类：飞书 / 微信的 voice.m4a（ftyp 容器）会被判成 video/mp4，所以 [Video] 块也算
+const AUDIO_BLOCK = /\[(?:Audio|Video)(?:\s+\d+\/\d+)?\]/;
 
 export function needsUnavailableNote(prompt: string): boolean {
   return AUDIO_BLOCK.test(prompt) && !prompt.includes(DIGEST_MARK) && !prompt.includes(UNAVAILABLE_MARK);
 }
 
 export function unavailableNote(): string {
-  return "⚠ 本次多模态预检不可用：下面 [Audio] 块里的转写来自平台兜底，没有时间轴、事件类型和缺口信息，非语音段可能被幻觉成语音。";
+  return "⚠ 本次多模态预检不可用：下面 [Audio]/[Video] 块里的内容来自平台兜底（或为空），没有时间轴、事件类型和缺口信息，非语音段可能被幻觉成语音。";
 }

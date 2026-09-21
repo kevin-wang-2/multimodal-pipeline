@@ -33,7 +33,8 @@ openclaw plugins install npm:@mmp/openclaw
   tools: {
     media: {
       models: [
-        { type: "cli", command: "mmp-triage", args: ["{{AttachmentPath}}"], capabilities: ["audio"], timeoutSeconds: 60 },
+        // capabilities 要同时写 audio 与 video：飞书 / 微信的 voice.m4a 会被 OpenClaw 按魔数（ftyp）判成 video/mp4；A 侧 ffmpeg 只取音轨
+        { type: "cli", command: "mmp-triage", args: ["{{AttachmentPath}}"], capabilities: ["audio", "video"], timeoutSeconds: 60, maxBytes: 8388608 },
         // 原有的 STT 条目留在后面作兜底，例如：
         // { provider: "openai", model: "gpt-4o-mini-transcribe" },
       ],

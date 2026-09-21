@@ -11,6 +11,7 @@ import { makeClient, triageBytes } from "../src/triage.js";
 test("hook: adds the downgrade note only when an [Audio] block lacks our marker", () => {
   assert.equal(needsUnavailableNote("[Audio]\nTranscript: hello"), true);
   assert.equal(needsUnavailableNote("[Audio 1/2]\n..."), true);
+  assert.equal(needsUnavailableNote("[Video]\n..."), true);   // 语音 m4a 被 OpenClaw 按魔数判成 video/mp4
   assert.equal(needsUnavailableNote("[Audio]\n[mmp:digest start]\n..."), false);
   assert.equal(needsUnavailableNote("[Audio]\n[mmp:digest unavailable]\n..."), false);
   assert.equal(needsUnavailableNote("just text"), false);

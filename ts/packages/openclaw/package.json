@@ -1,6 +1,6 @@
 {
   "name": "@mmp/openclaw",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "multimodal-pipeline 的 OpenClaw 适配：mmp-triage CLI（作为 tools.media 的 cli 模型条目，把音频变成带时间轴的 digest 注入块）+ 一个极小的 before_prompt_build 钩子（预检不可用时显式标注降级）。",
   "license": "Apache-2.0",

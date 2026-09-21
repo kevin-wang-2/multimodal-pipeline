@@ -21,11 +21,14 @@ B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后�
 
 ```
 入站语音 ──OpenClaw 媒体理解──▶ mmp-triage {{AttachmentPath}} ──@mmp/client──▶ B-py（内网）──▶ A triage.audio
-                                    │ exit 0：stdout = renderDigest(digest) → [Audio] 块
-                                    └ exit 2：回落到下一个条目（平台 STT）
-                                                    │
-                     before_prompt_build 钩子：有 [Audio] 块但无 [mmp:digest start] → prependContext "⚠ 本次多模态预检不可用…"
+                                    │ exit 0：stdout = renderDigest(digest) → [Audio]/[Video] 块
+                                    └ exit 2：回落到下一个条目（平台 STT，capabilities 也要含 video）
+                                                    │ 平台 STT 也失败 → prompt 里没有块，只剩附件引用
+                     before_prompt_build 钩子：有 [Audio]/[Video] 块但无 [mmp:digest start] → "⚠ 预检不可用：转写来自平台兜底…"
+                                                  没有块、只有附件引用（media://inbound/… 或音频文件名） → "⚠ 预检不可用，平台转写也没有产出…"
 ```
+
+三条路径的取舍（2026-09-21 联调后定）：CLI 失败**必须 exit 2**，否则平台 STT 条目永远轮不到、等于没有兜底；"降级显式"完全交给钩子，钩子按 prompt 里剩下什么来区分两级降级。曾试过 CLI 在服务不可用时 exit 0 并输出 `[mmp:digest unavailable]` 块——降级是显式了，但兜底被短路，否决。
 
 - **不需要**插件自己"收消息 → 提交 → 等结果 → 注入"，也**不需要**关掉平台转写——它就是兜底。实施计划 S3 原文的三条（`message_received` 提交、`before_prompt_build` 注入、关平台转写）由此改为：CLI 条目 + 一行降级标注 + 平台转写保留作回落。
 - **多轮追问不重复推理**：OpenClaw 原生保证（附件只理解一次）。块里印着 `media=sha256:…`，M2 的能力调用直接 `ref`。
@@ -43,11 +46,11 @@ B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后�
 | 项 | 怎么验 | 状态 |
 |---|---|---|
 | 本机 OpenClaw 发一段音频 → B-py → A → digest 注入回对话 | 飞书 / 微信发语音，看回复是否体现时间轴信息 | 待联调（要动本地 OpenClaw，需用户点头） |
-| 关掉 A 后 OpenClaw 仍能回复且注入块标注降级 | 停 lab 的 `mmp-node` 任务再发语音 | 待联调 |
+| 关掉 A 后 OpenClaw 仍能回复且注入块标注降级 | 停 lab 的 `mmp-node` 任务再发语音 | 联调中：0.1.1 时 A 停后 CLI exit 2 → 平台条目只声明 `audio`、附件被判 `video` 而未运行 → prompt 无块 → 钩子无从标注（静默降级）。0.1.2：平台条目加 `video`，钩子增加"无块只有附件引用"这一级 |
 | 同一媒体连续追问 5 轮不重复推理 | 看 A 日志：同一 media_id 只有一次 triage 任务 | 待联调 |
 | `mmp-triage` 三条路径 | `--check`、真实 m4a、B 不可达 exit 2 | ✅ 2026-09-21 |
 
 ## 限制
 
 - 附件 > 8 MiB 走回落：本机没有能给 A 拉取的 URL。要突破需要 B 提供上传口（架构 §6 留位）。
-- `before_prompt_build` 的 `prompt` 是否包含 `[Audio]` 块文本，文档说是（body 变成 `[Audio]` 块），联调时确认；不含则钩子改用 `message_received` 记 `sessionKey`。
+- `before_prompt_build` 的 `prompt` 含 `[Audio]`/`[Video]` 块文本（联调确认）；但两级媒体理解都失败时块不存在，prompt 只剩附件引用，钩子靠 `media://inbound/…` / 音频扩展名识别这种情况——启发式，非精确。更精确的做法是 `message_received` 记 `sessionKey`，留作后备。

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MmpError } from "@mmp/client";
 import { loadConfig } from "../src/config.js";
-import { needsUnavailableNote, unavailableNote } from "../src/hook.js";
+import { needsUnavailableNote, unavailableKind, unavailableNote } from "../src/hook.js";
 import { makeClient, triageBytes } from "../src/triage.js";
 
 test("hook: adds the downgrade note only when an [Audio] block lacks our marker", () => {
@@ -17,6 +17,12 @@ test("hook: adds the downgrade note only when an [Audio] block lacks our marker"
   assert.equal(needsUnavailableNote("just text"), false);
   assert.equal(needsUnavailableNote("[Image]\n..."), false);
   assert.match(unavailableNote(), /平台兜底/);
+  // 两级都失败：没有块，只剩附件引用 → 另一种说明
+  assert.equal(unavailableKind("用户发来附件 media://inbound/voice---667924c1.mp4"), "no-transcript");
+  assert.equal(unavailableKind("附件：voice.m4a 请处理"), "no-transcript");
+  assert.equal(unavailableKind("[Video]\n（平台转写）"), "fallback-transcript");
+  assert.equal(unavailableKind("[mmp:digest start]\n… voice.m4a"), null);
+  assert.match(unavailableNote("no-transcript"), /平台转写也没有产出/);
 });
 
 test("config: env overrides file; file supplies defaults", () => {

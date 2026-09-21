@@ -33,10 +33,11 @@ openclaw plugins install npm:@mmp/openclaw
   tools: {
     media: {
       models: [
-        // capabilities 要同时写 audio 与 video：飞书 / 微信的 voice.m4a 会被 OpenClaw 按魔数（ftyp）判成 video/mp4；A 侧 ffmpeg 只取音轨
+        // capabilities 写 audio + video：OpenClaw 按魔数分类，ftyp 主 brand 不是 M4A 的 mp4 容器（如 macOS Safari MediaRecorder 的 iso5）会被判成 video/mp4；
+        // 那种文件只有 cli 条目能接（平台 STT 接不了 video），发送端最好把主 brand 改成 "M4A "（见 docs/宿主接入-OpenClaw.md）
         { type: "cli", command: "mmp-triage", args: ["{{AttachmentPath}}"], capabilities: ["audio", "video"], timeoutSeconds: 60, maxBytes: 8388608 },
-        // 平台 STT 条目放在后面作兜底；capabilities 同样要含 video（语音 m4a 会被判成 video/mp4），whisper 接口吃得下 mp4 容器
-        { provider: "openai", model: "gpt-4o-mini-transcribe", capabilities: ["audio", "video"] },
+        // 平台 STT 条目放在后面作兜底。只能是 audio：OpenClaw 里 video 只有 google 提供者能接，openai 声明 video 也不会被调用
+        { provider: "openai", model: "gpt-4o-mini-transcribe", capabilities: ["audio"] },
       ],
       audio: { enabled: true, attachments: { mode: "all", maxAttachments: 3 } },
     },

@@ -22,7 +22,7 @@ B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后�
 ```
 入站语音 ──OpenClaw 媒体理解──▶ mmp-triage {{AttachmentPath}} ──@mmp/client──▶ B-py（内网）──▶ A triage.audio
                                     │ exit 0：stdout = renderDigest(digest) → [Audio]/[Video] 块
-                                    └ exit 2：回落到下一个条目（平台 STT，capabilities 也要含 video）
+                                    └ exit 2：回落到下一个条目（平台 STT，只接 audio）
                                                     │ 平台 STT 也失败 → prompt 里没有块，只剩附件引用
                      before_prompt_build 钩子：有 [Audio]/[Video] 块但无 [mmp:digest start] → "⚠ 预检不可用：转写来自平台兜底…"
                                                   没有块、只有附件引用（media://inbound/… 或音频文件名） → "⚠ 预检不可用，平台转写也没有产出…"
@@ -49,6 +49,12 @@ B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后�
 | 关掉 A 后 OpenClaw 仍能回复且注入块标注降级 | 停 lab 的 `mmp-node` 任务再发语音 | 联调中：0.1.1 时 A 停后 CLI exit 2 → 平台条目只声明 `audio`、附件被判 `video` 而未运行 → prompt 无块 → 钩子无从标注（静默降级）。0.1.2：平台条目加 `video`，钩子增加"无块只有附件引用"这一级 |
 | 同一媒体连续追问 5 轮不重复推理 | 看 A 日志：同一 media_id 只有一次 triage 任务 | 待联调 |
 | `mmp-triage` 三条路径 | `--check`、真实 m4a、B 不可达 exit 2 | ✅ 2026-09-21 |
+
+## 附件被判成 video 的问题
+
+OpenClaw 对 `chat.send` 附件**以魔数嗅探为准**，声明的 `mimeType` / `fileName` 只在嗅探不出具体类型时才用（`attachment-normalize`）。嗅探用 file-type：mp4 容器按 ftyp 主 brand 分——`M4A ` 是 `audio/x-m4a`，`iso5`/`isom` 等一律 `video/mp4`。iOS Safari 的 MediaRecorder 写 `M4A `，**macOS Safari 写 `iso5`**，于是同一段 `audio/mp4` 录音在 Mac 上会进 video 通道；video 通道里只有 google 提供者实现了 `describeVideo`，openai STT 条目无论声明什么 capabilities 都不会被调用（日志：`Video understanding provider "openai" not available`）。
+
+结论：cli 条目声明 `audio + video` 只能保证 A 在线时能接；A 离线时平台 STT 兜底对这种文件永远缺席。根治在发送端——上传前把 ftyp 主 brand（字节 8–11）改成 `M4A `，文件仍是合法 MP4（兼容 brand 列表未动），OpenClaw 嗅探为 `audio/x-m4a`，`mmp-triage` 与 openai 两个条目都能接。实测（2026-09-21，A 停机）：原文件 → "No transcript returned"，无任何条目匹配；改 brand 后 → `mmp-triage` exit 2 → openai 条目被调用（本机被 SSRF 策略拦是 Clash fake-ip 的环境问题，不是链路问题）。
 
 ## 限制
 

@@ -1,0 +1,6 @@
+{
+  "ref": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+  "get": {
+    "url": "https://storage.example/bucket/a.wav?X-Sig=abc"
+  }
+}

@@ -134,11 +134,13 @@ class _Handler(BaseHTTPRequestHandler):
     files: dict[str, bytes] = {}
     puts: dict[str, bytes] = {}
     require_header: tuple[str, str] | None = None
+    gets: int = 0
 
     def log_message(self, *a):  # 静音
         pass
 
     def do_GET(self):
+        _Handler.gets += 1
         if self.require_header and self.headers.get(self.require_header[0]) != self.require_header[1]:
             self.send_response(403); self.end_headers(); return
         data = self.files.get(self.path)
@@ -162,7 +164,7 @@ class MediaServer:
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
-        _Handler.files, _Handler.puts, _Handler.require_header = {}, {}, None
+        _Handler.files, _Handler.puts, _Handler.require_header, _Handler.gets = {}, {}, None, 0
 
     def url(self, path: str) -> str:
         return f"http://127.0.0.1:{self.port}{path}"

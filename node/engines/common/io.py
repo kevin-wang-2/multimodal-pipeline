@@ -15,7 +15,7 @@ import threading
 import traceback
 from typing import Awaitable, Callable
 
-PROTOCOL_VERSION = "1.0"
+PROTOCOL_VERSION = "1.1"
 RunFn = Callable[[dict, asyncio.Event], Awaitable[tuple[object, dict]]]
 
 

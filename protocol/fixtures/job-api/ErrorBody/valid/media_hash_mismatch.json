@@ -1,0 +1,4 @@
+{
+  "error": "media_hash_mismatch",
+  "message": "fetched sha256:... != ref"
+}

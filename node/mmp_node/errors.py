@@ -8,6 +8,8 @@ HTTP_STATUS = {
     "not_found": 404,
     "media_too_large": 413,
     "media_fetch_failed": 422,
+    "media_not_found": 422,
+    "media_hash_mismatch": 422,
     "backpressure": 429,
     "engine_failed": 500,
     "no_node": 503,

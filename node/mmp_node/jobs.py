@@ -60,9 +60,9 @@ class Job:
 
     def response(self) -> tuple[int, dict]:
         """(http_status, body)，与协议.md §3.3 一一对应。"""
-        base = {"job_id": self.job_id, "type": self.task_type}
+        base = {"job_id": self.job_id, "type": self.task_type, "media_id": self.media_id}
         if self.status == "done":
-            body = {**base, "status": "done", "media_id": self.media_id, "cached": self.cached, "source": self.source}
+            body = {**base, "status": "done", "cached": self.cached, "source": self.source}
             if self.result_ref is not None:
                 body["result_ref"] = self.result_ref
             else:

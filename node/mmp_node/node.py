@@ -79,7 +79,9 @@ class Node:
         wait_s = float(req.get("wait", 0) if wait is None else wait)
 
         self.sched.check_backpressure()          # 先于取媒体：别为了说 429 先下载 100MB
+        t_fetch = time.monotonic()
         fetched = await self.media.fetch(req["media"])
+        fetch_ms = int((time.monotonic() - t_fetch) * 1000)
         key = task_key(fetched.media_id, task_type, tier["tier"], tier["engine_version"], params)
 
         hit = self.cache.get(key)
@@ -97,8 +99,14 @@ class Node:
             return active.response()
 
         job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, fetched.path, key)
+        job.timings_ms["fetch"] = fetch_ms       # ref 命中时 ≈ 0：这就是"没重复拉"的证据
         self.jobs[job.job_id] = job
-        self.sched.enqueue(job)
+        self.media.pin(job.media_id)          # 排队 / 运行期间不许被 LRU 淘汰；scheduler 收尾时 unpin
+        try:
+            self.sched.enqueue(job)
+        except ApiError:
+            self.media.unpin(job.media_id)
+            raise
         await job.wait(wait_s)
         return job.response()
 

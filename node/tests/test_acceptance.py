@@ -215,3 +215,58 @@ async def test_api_key(tmp_path):
         assert (await s.client.get("/health")).status_code == 200  # health 不鉴权
     finally:
         await s.client.aclose(); await s.link.close(); await s.node.close()
+
+
+# ---------- 资源 cache：ref 引用 + LRU（协议 v1.1）----------
+async def test_media_ref_skips_refetch(stack, media_server):
+    from conftest import _Handler
+    data = blob(4000, seed=11)
+    ep = media_server.serve("/big.wav", data)
+    r1 = await stack.submit(type="echo", media={"get": ep}, params={"tag": "first"}, wait=5)
+    assert r1.status_code == 200 and r1.json()["cached"] is False
+    mid = r1.json()["media_id"]
+    hits_after_first = _Handler.gets
+    # 只给 ref：不同 params → 不命中结果缓存，但媒体不再下载
+    r2 = await stack.submit(type="echo", media={"ref": mid}, params={"tag": "second"}, wait=5)
+    assert r2.status_code == 200 and r2.json()["cached"] is False and r2.json()["media_id"] == mid
+    assert _Handler.gets == hits_after_first
+    assert r2.json()["timings_ms"]["fetch"] <= 5
+    # ref + get：本地有 → 也不下载
+    r3 = await stack.submit(type="echo", media={"ref": mid, "get": ep}, params={"tag": "third"}, wait=5)
+    assert r3.status_code == 200 and _Handler.gets == hits_after_first
+    # 不认识的 ref 且没有来源 → 422 media_not_found（C 应退回带完整句柄重提）
+    r4 = await stack.submit(type="echo", media={"ref": "sha256:" + "0" * 64}, wait=5)
+    assert r4.status_code == 422 and r4.json()["error"] == "media_not_found"
+    # ref + get 但内容对不上 → 422 media_hash_mismatch（内容本身仍以真实 hash 入库）
+    r5 = await stack.submit(type="echo", media={"ref": "sha256:" + "0" * 64, "get": ep}, wait=5)
+    assert r5.status_code == 422 and r5.json()["error"] == "media_hash_mismatch"
+    assert _Handler.gets == hits_after_first + 1
+    # inline 也一样：ref 命中就不用再传 8MB
+    r6 = await stack.submit(type="echo", media={"ref": mid, "inline": "AAAA"}, params={"tag": "fourth"}, wait=5)
+    assert r6.status_code == 200 and r6.json()["media_id"] == mid
+
+
+async def test_media_store_lru_eviction_respects_pins(tmp_path):
+    s = await build_stack(tmp_path, media__max_store_bytes=10_000, engines__max_concurrency=1)
+    try:
+        store = s.node.media
+        a = (await s.submit(type="echo", media=inline(blob(4000, seed=1)), wait=5)).json()["media_id"]
+        b = (await s.submit(type="echo", media=inline(blob(4000, seed=2)), wait=5)).json()["media_id"]
+        assert store.has(a) and store.has(b) and store.total_bytes() == 8000
+        # 第三份进来超限 → 淘汰最久未访问的 a
+        c = (await s.submit(type="echo", media=inline(blob(4000, seed=3)), wait=5)).json()["media_id"]
+        assert not store.has(a) and store.has(b) and store.has(c)
+        # 被淘汰的 ref 再来 → media_not_found；带来源就重新拉回
+        r = await s.submit(type="echo", media={"ref": a}, params={"tag": "x"}, wait=5)
+        assert r.status_code == 422 and r.json()["error"] == "media_not_found"
+        # 在跑的任务 pin 住：d 在 sleep，塞入 e、f 不能把 d 淘汰
+        r = await s.submit(type="echo", media=inline(blob(4000, seed=4)), params={"sleep_ms": 1500})
+        d = r.json()["media_id"]
+        for seed in (5, 6):
+            await s.submit(type="echo", media=inline(blob(4000, seed=seed)), params={"sleep_ms": 1500})
+        assert store.has(d), "pinned media must survive eviction"
+        assert store.total_bytes() <= 10_000 + 4000  # 允许 pin 导致的短暂超限
+        d_job = await s.finish(r.json()["job_id"])
+        assert d_job["status"] == "done"
+    finally:
+        await s.client.aclose(); await s.link.close(); await s.node.close()

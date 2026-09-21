@@ -93,6 +93,7 @@ class Scheduler:
             self._heap = [e for e in self._heap if e[2] != job.job_id]
             heapq.heapify(self._heap)
             self._refresh_positions()
+            self.media.unpin(job.media_id)
             job.finish("cancelled")
         elif job.job_id in self._running:
             job.cancel_requested = True
@@ -174,7 +175,7 @@ class Scheduler:
                     job.tier = cheaper
                     self._acquire(job)
                     degraded_reason = "timeout"
-            job.timings_ms = {k: int(v) for k, v in res.timings_ms.items()}
+            job.timings_ms.update({k: int(v) for k, v in res.timings_ms.items()})
             job.timings_ms["total"] = int((time.monotonic() - t0) * 1000)
             job.source = {
                 "tier": job.tier["tier"], "engine": job.tier["engine"], "engine_version": job.tier["engine_version"],
@@ -202,6 +203,7 @@ class Scheduler:
         finally:
             self._release(job)
             self._running.pop(job.job_id, None)
+            self.media.unpin(job.media_id)
             self._wake.set()
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
                                  "tier": job.tier["tier"], "degraded": degraded_reason, "cached": False,

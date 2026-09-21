@@ -5,7 +5,7 @@
 [node]
 id = "mac-m1"                       # ^[a-z0-9][a-z0-9-]{0,62}$；job_id 的前缀
 key = "change-me-to-a-long-random-secret"   # register 用的节点密钥，≥16 字符
-protocol_version = "1.0"
+protocol_version = "1.1"
 data_dir = "./cache"                # 媒体临时文件、SQLite 都放这里
 
 [queue]
@@ -23,6 +23,7 @@ max_fetch_bytes = 268435456         # get 端点最多拉 256 MiB
 fetch_timeout_sec = 60
 max_inline_result_bytes = 1048576   # 结果超过 1 MiB 且有 put 端点 → PUT 过去
 use_env_proxy = false               # 取放媒体是否遵守 HTTP(S)_PROXY / ALL_PROXY；内网句柄一般不该走代理
+max_store_bytes = 2147483648        # 媒体目录上限 2 GiB：按最近访问 LRU 淘汰；排队 / 运行中的任务 pin 住；ref 命中即复用
 
 [cache]
 path = "results.sqlite"             # 相对 data_dir

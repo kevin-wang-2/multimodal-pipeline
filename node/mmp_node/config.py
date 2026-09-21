@@ -14,7 +14,7 @@ ENV_PREFIX = "MMP_"
 class NodeSection(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
     key: str = Field(min_length=16)
-    protocol_version: str = "1.0"
+    protocol_version: str = "1.1"
     data_dir: Path = Path("./cache")
 
 
@@ -35,6 +35,7 @@ class MediaSection(BaseModel):
     fetch_timeout_sec: float = 60
     max_inline_result_bytes: int = 1024 * 1024
     use_env_proxy: bool = False
+    max_store_bytes: int = 2 * 1024 * 1024 * 1024   # 媒体目录上限，LRU 淘汰；在跑的任务 pin 住
 
 
 class CacheSection(BaseModel):

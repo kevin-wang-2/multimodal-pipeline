@@ -20,6 +20,7 @@ jobs:
     env:
       PIP_DEFAULT_TIMEOUT: "120"
       PIP_RETRIES: "5"
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple   # runner 到 files.pythonhosted.org 频繁读超时（run 902 / 985）
     steps:
       - name: Checkout
         env:

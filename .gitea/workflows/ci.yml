@@ -60,6 +60,7 @@ jobs:
           pnpm gen-types
           git diff --exit-code -- packages/protocol/src/types.ts || (echo "types.ts is stale: run pnpm gen-types and commit" && exit 1)
           pnpm -r test
+          pnpm release:pack && ls -la dist-packs
         working-directory: ts
 
       - name: Node acceptance (A + B-py echo, B-py scenarios, A ws client vs real B-ts)

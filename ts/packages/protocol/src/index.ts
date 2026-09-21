@@ -13,7 +13,16 @@ import { fileURLToPath } from "node:url";
 export * from "./types.js";
 
 export const PROTOCOL_VERSION = "1.1";
-export const SCHEMAS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../protocol/schemas");
+
+/** schema 目录：发布的包里是 <pkg>/schemas（build 时从仓库 protocol/schemas 复制）；monorepo 内开发时回退到仓库路径。 */
+function locateSchemas(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const cand of [resolve(here, "../schemas"), resolve(here, "../../../../protocol/schemas")]) {
+    try { if (readdirSync(cand).some((f) => f.endsWith(".schema.json"))) return cand; } catch { /* next */ }
+  }
+  throw new Error("@mmp/protocol: schemas directory not found (package built without schemas?)");
+}
+export const SCHEMAS_DIR = locateSchemas();
 
 export const ID = {
   abMessage: "urn:mmp:protocol:1:ab-message",

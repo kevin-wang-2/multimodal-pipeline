@@ -1,0 +1,26 @@
+{
+  "name": "@mmp/client",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "multimodal-pipeline 的调用节点（C）客户端：submit / wait / cancel / capabilities，错误码 → 异常，digest → 注入块的确定性模板。只依赖 fetch，不知道也不关心 B 在哪。",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "https://github.com/kevin-wang-2/multimodal-pipeline", "directory": "ts/packages/client" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@mmp/protocol": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

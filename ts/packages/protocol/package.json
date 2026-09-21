@@ -1,15 +1,19 @@
 {
   "name": "@mmp/protocol",
   "version": "1.1.0",
-  "private": true,
   "type": "module",
-  "description": "协议 schema 的加载、ajv 校验器与生成的 TypeScript 类型。唯一源头是仓库根的 protocol/schemas。",
+  "description": "multimodal-pipeline 协议：JSON Schema（随包打包）、ajv 校验器、从 schema 生成的 TypeScript 类型、错误码表。",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "gen-types": "tsx scripts/gen-types.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-schemas.mjs",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
@@ -21,5 +25,19 @@
     "json-schema-to-typescript": "^15.0.4",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
+  },
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "schemas",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kevin-wang-2/multimodal-pipeline",
+    "directory": "ts/packages/protocol"
   }
 }

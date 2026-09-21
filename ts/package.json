@@ -5,8 +5,11 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "gen-types": "pnpm --filter @mmp/protocol gen-types"
+    "gen-types": "pnpm --filter @mmp/protocol gen-types",
+    "release:pack": "pnpm -r build && pnpm -r --filter './packages/*' exec pnpm pack --pack-destination ../../dist-packs"
   },
   "packageManager": "pnpm@10.13.1",
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

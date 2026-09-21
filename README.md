@@ -54,6 +54,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
   - [x] S1 A 核心 + B-py 绑定模式 + CI（2026-09-20）：`node/`，`echo` 任务类型跑通队列 / 缓存 / 句柄 / 注册表 / 任务 API，18 项验收测试。
   - [x] S2 `triage.audio` 引擎（2026-09-20）：三件套跑在子进程，双阈值 VAD 切点 −16ms，26s 素材 847ms（0.68× T2）；`gpu` job 跑真模型冒烟。
   - [x] S5 `ocr.structured` 引擎（2026-09-21）：PP-OCRv6 快档 + PaddleOCR-VL 慢档同一子进程，VRAM 按 tier 记账（VL 并发 2 → 第二个排队），快档每页给升级信号；T5 发票 12/12 字段。
+  - [x] S3 前半：`@mmp/client`（2026-09-21）：客户端包 + 注入模板，三个 ts 包可 `pnpm pack` 发布；OpenClaw / 宿主适配层待联调。
   - [x] 公网端到端（2026-09-21）：枢纽机 nginx 443 + B-ts，内网 GPU 机 A 出站 wss；echo / 音频 / OCR 两档经 get+put 句柄往返，结果 PUT 回宿主；公网 nmap A 机 0 open。见 [docs/结果-公网端到端.md](docs/结果-公网端到端.md)。
   - [x] S4 A↔B WebSocket + B-ts（2026-09-21）：`ts/packages/broker`，A 出站 ws 重连重注册，B-py / B-ts 跑同一批行为契约场景；协议 v1.1 加媒体 `ref` 避免重复拉取。
 - [ ] M2 能力层（工具注册表 + 首批 head）
@@ -90,6 +91,7 @@ node/
 ts/                    pnpm workspace
   packages/protocol/   schema 加载、ajv 校验、从 protocol/schemas 生成的 TS 类型（pnpm gen-types）
   packages/broker/     B-ts：core（操作层）、ws（A 连入）、http（任务 API）、cli（独立模式 mmp-broker）
+  packages/client/     C：@mmp/client——submit / wait / cancel / capabilities、MmpError 分类、digest → 注入块模板
 .gitea/workflows/      ci.yml（unit：契约 + ts + node 验收）、gpu.yml（windows runner：真模型冒烟 + Windows 全套）
 docs/
   架构.md              设计文档（公开版）

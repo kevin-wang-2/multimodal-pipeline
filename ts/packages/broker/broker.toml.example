@@ -1,0 +1,12 @@
+# B-ts 独立模式的配置。复制为 broker.toml；任意键可用 MMP_BROKER__<KEY> 覆盖。
+[broker]
+host = "0.0.0.0"                    # 公网侧：这是系统里唯一的公网监听（HTTP 任务 API + /ws 共用一个端口）
+port = 8766
+ws_path = "/ws"
+node_key = "change-me-to-a-long-random-secret"   # A 的 register 必须带同一把钥匙；不符 → 关闭码 4001
+api_key = ""                        # 非空时 C→B 需 Authorization: Bearer <api_key>
+protocol_version = "1.1"
+inflight_grace_sec = 5              # 在途超时 = wait + 这个 → 503 node_offline，并关掉该连接
+heartbeat_interval_sec = 10
+missed_heartbeats = 3
+register_timeout_sec = 10           # 连上不 register 就关（4003）

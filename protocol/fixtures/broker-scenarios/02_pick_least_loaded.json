@@ -1,0 +1,195 @@
+{
+  "description": "多个节点提供同一类型时挑 queue_len 最小的；心跳更新后路由跟着变",
+  "broker": {
+    "node_key": "scenario-node-key-0123456789"
+  },
+  "steps": [
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "echo",
+              "modal": "audio",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": "required"
+              },
+              "output_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "replies": {
+        "submit": {
+          "http_status": 200,
+          "body": {
+            "job_id": "$echo_job_id",
+            "type": "echo",
+            "status": "done",
+            "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+            "cached": false,
+            "source": {
+              "tier": "cpu",
+              "engine": "e-echo",
+              "engine_version": "1",
+              "generated_at": "2026-09-21T00:00:00Z",
+              "degraded": false
+            },
+            "result": {
+              "from": "node-a"
+            }
+          }
+        }
+      }
+    },
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-b",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "echo",
+              "modal": "audio",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": "required"
+              },
+              "output_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "replies": {
+        "submit": {
+          "http_status": 200,
+          "body": {
+            "job_id": "$echo_job_id",
+            "type": "echo",
+            "status": "done",
+            "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+            "cached": false,
+            "source": {
+              "tier": "cpu",
+              "engine": "e-echo",
+              "engine_version": "1",
+              "generated_at": "2026-09-21T00:00:00Z",
+              "degraded": false
+            },
+            "result": {
+              "from": "node-b"
+            }
+          }
+        }
+      }
+    },
+    {
+      "heartbeat": {
+        "type": "heartbeat",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "queue_len": 5,
+          "running": 0,
+          "engines_loaded": []
+        }
+      }
+    },
+    {
+      "heartbeat": {
+        "type": "heartbeat",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-b",
+          "queue_len": 1,
+          "running": 0,
+          "engines_loaded": []
+        }
+      }
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "echo",
+        "media": {
+          "ref": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1"
+        }
+      },
+      "expect": {
+        "http_status": 200,
+        "body": {
+          "result": {
+            "from": "node-b"
+          }
+        }
+      },
+      "expect_routed_to": "node-b"
+    },
+    {
+      "heartbeat": {
+        "type": "heartbeat",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-b",
+          "queue_len": 9,
+          "running": 0,
+          "engines_loaded": []
+        }
+      }
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "echo",
+        "media": {
+          "ref": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1"
+        }
+      },
+      "expect": {
+        "http_status": 200,
+        "body": {
+          "result": {
+            "from": "node-a"
+          }
+        }
+      },
+      "expect_routed_to": "node-a"
+    }
+  ]
+}

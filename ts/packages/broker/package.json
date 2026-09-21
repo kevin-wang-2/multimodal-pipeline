@@ -1,0 +1,27 @@
+{
+  "name": "@mmp/broker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "B 协调节点的 TypeScript 实现：操作层 core、ws 服务端（A 连入）、HTTP 绑定（C 调用）、CLI。绑定模式（作为库嵌入宿主）与独立模式（mmp-broker 进程）同一份代码。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": { "mmp-broker": "./dist/cli.js" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts",
+    "start": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@mmp/protocol": "workspace:*",
+    "smol-toml": "^1.3.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

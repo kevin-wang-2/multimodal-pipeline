@@ -1,0 +1,159 @@
+{
+  "description": "register 校验：错密钥 4001、major 不同 4002、首条不是 register / 缺字段 4003",
+  "broker": {
+    "node_key": "scenario-node-key-0123456789"
+  },
+  "steps": [
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "wrong-key-0123456789",
+          "capabilities": [
+            {
+              "id": "echo",
+              "modal": "audio",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": "required"
+              },
+              "output_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "expect_reject": 4001
+    },
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "2.0",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "echo",
+              "modal": "audio",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": "required"
+              },
+              "output_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "expect_reject": 4002
+    },
+    {
+      "register": {
+        "type": "heartbeat",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "queue_len": 0,
+          "running": 0,
+          "engines_loaded": []
+        }
+      },
+      "expect_reject": 4003
+    },
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [],
+          "engine_versions": {}
+        }
+      },
+      "expect_reject": 4003
+    },
+    {
+      "op": "health",
+      "expect": {
+        "http_status": 200,
+        "body": {
+          "status": "no_node"
+        }
+      }
+    },
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "1.0",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "echo",
+              "modal": "audio",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": "required"
+              },
+              "output_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "replies": {}
+    },
+    {
+      "op": "health",
+      "expect": {
+        "http_status": 200,
+        "body": {
+          "status": "ok"
+        }
+      }
+    }
+  ]
+}

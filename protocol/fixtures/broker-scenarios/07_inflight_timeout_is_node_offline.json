@@ -1,0 +1,92 @@
+{
+  "description": "A 在 wait + grace 内不响应 → 503 node_offline，且该连接被视为不健康丢弃",
+  "broker": {
+    "node_key": "scenario-node-key-0123456789",
+    "inflight_grace_sec": 0.3
+  },
+  "steps": [
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "1.1",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "echo",
+              "modal": "audio",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": "required"
+              },
+              "output_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "replies": {
+        "submit": {
+          "http_status": 200,
+          "body": {
+            "job_id": "$echo_job_id",
+            "type": "echo",
+            "status": "done",
+            "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+            "cached": false,
+            "source": {
+              "tier": "cpu",
+              "engine": "e-echo",
+              "engine_version": "1",
+              "generated_at": "2026-09-21T00:00:00Z",
+              "degraded": false
+            },
+            "result": {
+              "from": "node-a"
+            }
+          }
+        }
+      },
+      "delay_sec": 1.5
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "echo",
+        "media": {
+          "ref": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1"
+        },
+        "wait": 0
+      },
+      "expect": {
+        "http_status": 503,
+        "body": {
+          "error": "node_offline"
+        }
+      },
+      "expect_routed_to": "node-a"
+    },
+    {
+      "op": "health",
+      "expect": {
+        "http_status": 200,
+        "body": {
+          "status": "no_node"
+        }
+      }
+    }
+  ]
+}

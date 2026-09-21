@@ -42,7 +42,16 @@ jobs:
           %PY_NODE% --version
           %PY_NODE% -m pip install -q -e "node[dev]" || exit /b 1
           %MMP_ENGINE_PYTHON% -c "import sherpa_onnx, onnxruntime; print('engine env ok', sherpa_onnx.__version__)" || exit /b 1
-      - name: Node acceptance on Windows (echo + triage.audio real model)
+      - name: Build ts workspace (B-ts for the ws integration test)
+        shell: cmd
+        working-directory: ts
+        run: |
+          @echo off
+          node --version
+          pnpm --version
+          pnpm install --frozen-lockfile || exit /b 1
+          pnpm -r build || exit /b 1
+      - name: Node acceptance on Windows (echo + triage.audio real model + ws vs B-ts)
         shell: cmd
         working-directory: node
         run: '%PY_NODE% -m pytest -q -p no:cacheprovider'

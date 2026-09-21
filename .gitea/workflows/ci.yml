@@ -46,12 +46,21 @@ jobs:
         run: ../../../.venv/bin/python -m pytest -q
         working-directory: protocol/tests/py
 
-      - name: Node acceptance (A + B-py, echo engine)
-        run: ../.venv/bin/python -m pytest -q
-        working-directory: node
-
       - name: Contract tests (ajv)
         run: |
           pnpm install --frozen-lockfile
           pnpm test
         working-directory: protocol/tests/ts
+
+      - name: ts workspace - build, generated types fresh, tests (protocol + B-ts scenarios)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -r build
+          pnpm gen-types
+          git diff --exit-code -- packages/protocol/src/types.ts || (echo "types.ts is stale: run pnpm gen-types and commit" && exit 1)
+          pnpm -r test
+        working-directory: ts
+
+      - name: Node acceptance (A + B-py echo, B-py scenarios, A ws client vs real B-ts)
+        run: ../.venv/bin/python -m pytest -q
+        working-directory: node

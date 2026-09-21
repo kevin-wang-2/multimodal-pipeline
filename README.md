@@ -53,6 +53,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
   - [x] S0 协议定稿（2026-09-19）：[docs/协议.md](docs/协议.md) + `protocol/`，py / ts 契约测试全绿。
   - [x] S1 A 核心 + B-py 绑定模式 + CI（2026-09-20）：`node/`，`echo` 任务类型跑通队列 / 缓存 / 句柄 / 注册表 / 任务 API，18 项验收测试。
   - [x] S2 `triage.audio` 引擎（2026-09-20）：三件套跑在子进程，双阈值 VAD 切点 −16ms，26s 素材 847ms（0.68× T2）；`gpu` job 跑真模型冒烟。
+  - [x] S4 A↔B WebSocket + B-ts（2026-09-21）：`ts/packages/broker`，A 出站 ws 重连重注册，B-py / B-ts 跑同一批行为契约场景；协议 v1.1 加媒体 `ref` 避免重复拉取。
 - [ ] M2 能力层（工具注册表 + 首批 head）
 - [ ] M3 预算与反馈升级
 - [ ] M4 模态同构（图片 / 视频复用同一套抽象）
@@ -84,7 +85,10 @@ node/
   tools/               smoke_triage_audio.py：真模型冒烟（CI gpu job）
   tests/               S1 验收测试（经完整栈：HTTP → Broker → 信封 → Node → 子进程）
   node.toml.example    全部阈值外置；MMP_<SECTION>__<KEY> 环境变量覆盖
-.gitea/workflows/      ci.yml（unit：契约 + 验收）、gpu.yml（骨架，等 gpu runner）
+ts/                    pnpm workspace
+  packages/protocol/   schema 加载、ajv 校验、从 protocol/schemas 生成的 TS 类型（pnpm gen-types）
+  packages/broker/     B-ts：core（操作层）、ws（A 连入）、http（任务 API）、cli（独立模式 mmp-broker）
+.gitea/workflows/      ci.yml（unit：契约 + ts + node 验收）、gpu.yml（windows runner：真模型冒烟 + Windows 全套）
 docs/
   架构.md              设计文档（公开版）
   协议.md              协议 v1.0 人读版，与 protocol/schemas 同步
@@ -138,7 +142,18 @@ curl -s -X POST localhost:8765/jobs -H 'content-type: application/json' \
 curl -s localhost:8765/capabilities; curl -s localhost:8765/health
 ```
 
-测试：`(cd node && ../.venv/bin/python -m pytest -q)`；协议契约测试见 [docs/协议.md](docs/协议.md) §9。
+## 运行 B-ts（独立模式）+ A 连过去
+
+```bash
+(cd ts && pnpm install && pnpm -r build)
+MMP_BROKER__NODE_KEY=<同 node.key 的密钥> MMP_BROKER__PORT=8766 node ts/packages/broker/dist/cli.js   # HTTP 任务 API 与 /ws 共用一个端口
+# node.toml 里加：
+# [[brokers]]
+# url = "ws://<broker-host>:8766/ws"
+curl -s localhost:8766/health          # 应看到 A 注册进来
+```
+
+测试：`(cd node && ../.venv/bin/python -m pytest -q)`（含 A ws 客户端对真 B-ts 的集成验收，需先构建 ts）；`(cd ts && pnpm -r test)`；协议契约测试见 [docs/协议.md](docs/协议.md) §9。
 
 ## 托管
 

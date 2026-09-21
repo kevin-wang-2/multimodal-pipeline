@@ -54,6 +54,17 @@ class BrokerSection(BaseModel):
     inflight_grace_sec: float = 5
 
 
+class BrokerEndpoint(BaseModel):
+    """A 主动连的一个 B（B/C 绑定或独立 B）。可以有多个。"""
+    url: str = Field(pattern=r"^wss?://")
+    key: str | None = None             # register 用的密钥；默认 node.key
+    heartbeat_interval_sec: float = 10
+    backoff_min_sec: float = 1
+    backoff_max_sec: float = 60
+    backoff_jitter: float = 0.2
+    use_env_proxy: bool = False       # 出站 ws 是否走 HTTP(S)_PROXY / ALL_PROXY
+
+
 class EngineSection(BaseModel):
     module: str
     python: str | None = None          # 引擎自己的解释器（conda 环境）；默认与 A 相同
@@ -71,6 +82,7 @@ class Config(BaseModel):
     cache: CacheSection = CacheSection()
     jobs: JobsSection = JobsSection()
     broker: BrokerSection = BrokerSection()
+    brokers: list[BrokerEndpoint] = []
     engines: dict[str, EngineSection] = {}
 
     @property

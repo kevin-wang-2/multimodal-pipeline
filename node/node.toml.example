@@ -38,6 +38,12 @@ port = 8765
 api_key = ""                        # 非空时 C→B 需 Authorization: Bearer <api_key>
 inflight_grace_sec = 5              # 在途超时 = wait + 这个
 
+# A 主动连出去的 B（B/C 绑定在公网 agent 宿主里，或独立 B）。可以写多个 [[brokers]]。
+# A 零公网监听：这是 A 唯一的出境连接。退避 1s → 60s，抖动 ±20%；重连即重新 register。
+# [[brokers]]
+# url = "wss://agent-host.example:8766/ws"
+# key = "same-secret-as-broker.node_key"    # 省略则用 node.key
+
 # 每个启用的引擎一节。module 的 CAPABILITY 给出任务类型元数据；这里只放部署相关的覆盖。
 [engines.echo]
 module = "engines.echo"             # python -m <module>，cwd = node/

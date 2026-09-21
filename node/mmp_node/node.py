@@ -161,9 +161,9 @@ class Node:
         return {"type": type_, "protocol_version": self.cfg.node.protocol_version,
                 "ts": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"), "payload": payload}
 
-    def register_message(self) -> dict:
+    def register_message(self, key: str | None = None) -> dict:
         return self.envelope("register", {
-            "node_id": self.node_id, "node_key": self.cfg.node.key,
+            "node_id": self.node_id, "node_key": key or self.cfg.node.key,
             "capabilities": self.registry.capabilities(), "engine_versions": self.registry.engine_versions(),
         })
 

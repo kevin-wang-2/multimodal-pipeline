@@ -50,13 +50,14 @@ def _iso(ts: float) -> str:
 
 class Broker:
     def __init__(self, node_key: str, protocol_version: str = "1.1", inflight_grace_sec: float = 5,
-                 heartbeat_interval_sec: float = 10, missed_heartbeats: int = 3):
+                 heartbeat_interval_sec: float = 10, missed_heartbeats: int = 3, now: Callable[[], float] = time.time):
         self.node_key = node_key
         self.protocol_version = protocol_version
         self.inflight_grace_sec = inflight_grace_sec
         self.offline_after = heartbeat_interval_sec * missed_heartbeats
         self.nodes: dict[str, NodeLink] = {}
         self._req_seq = itertools.count(1)
+        self.now = now   # 可注入的时钟：契约场景用它拨快心跳超时
 
     # ---- A 侧消息进入 ----
     def on_register(self, envelope: dict, send: SendFn) -> NodeLink:
@@ -70,7 +71,7 @@ class Broker:
         if not p.get("node_id") or not p.get("capabilities"):
             raise RegisterRejected(4003, "register missing node_id or capabilities")
         link = NodeLink(node_id=p["node_id"], send=send, capabilities=p["capabilities"],
-                        engine_versions=p.get("engine_versions") or {})
+                        engine_versions=p.get("engine_versions") or {}, connected_since=self.now())
         old = self.nodes.get(link.node_id)
         if old is not None:
             log.info("node %s re-registered, replacing old link", link.node_id)
@@ -82,7 +83,7 @@ class Broker:
         link = self.nodes.get(p.get("node_id"))
         if link is None:
             return
-        link.last_heartbeat = time.time()
+        link.last_heartbeat = self.now()
         link.heartbeat = p
 
     def on_disconnect(self, node_id: str) -> None:
@@ -90,7 +91,7 @@ class Broker:
 
     def _live(self) -> list[NodeLink]:
         """心跳超过 3 个周期没来的节点视为离线（进程内绑定的节点没有心跳超时问题：它和 B 同生死）。"""
-        now = time.time()
+        now = self.now()
         for nid, l in list(self.nodes.items()):
             if l.last_heartbeat is not None and now - l.last_heartbeat > self.offline_after:
                 log.warning("node %s missed heartbeats, dropping", nid)

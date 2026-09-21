@@ -7,7 +7,7 @@
 | 宿主 | 网络 | 接法 | 连哪个 B |
 |---|---|---|---|
 | OpenClaw（本机） | 真内网 | 本文：`@mmp/openclaw`（`mmp-triage` CLI 条目 + 一个钩子） | A/B 绑定的 B-py（GPU 机内网地址 :8765，api_key） |
-| 世纳终端 agent | tailnet | 与 production manager 相同：直接 `@mmp/client` | 同上（tailnet 地址） |
+| 世纳终端 agent | tailnet | 直接 `@mmp/client`：[宿主接入-内网直连.md](宿主接入-内网直连.md) | 同上（tailnet 地址） |
 | production manager | 公网 | `@mmp/client` | 公网枢纽 B-ts |
 
 B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后、防火墙规则只放本网段与 tailnet，A 仍零公网监听（公网 nmap 0 open，见 [结果-公网端到端.md](结果-公网端到端.md)）。

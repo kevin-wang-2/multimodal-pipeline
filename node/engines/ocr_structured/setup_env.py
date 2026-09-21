@@ -2,7 +2,7 @@
 """GPU 机上建 ocr.structured 的引擎环境（Windows + conda），把 T5 §6 的四个坑写成脚本。只依赖标准库 + curl + conda。
 
     python setup_env.py create   [--env ocrlab] [--wheels C:\\mmp\\wheels]   # 建 env + 装 paddlepaddle-gpu(离线) + paddleocr/paddlex + 拉模型
-    python setup_env.py verify   [--env ocrlab]                              # 只验证：CUDA 可用、版本正确、模型在缓存里
+    python setup_env.py verify   [--env ocrlab]                              # 只验证：CUDA 可用、版本正确、模型在缓存里（PADDLE_PDX_CACHE_HOME 或 ~/.paddlex）
 
 坑位（结果-T5.md §6）：
   1. pip 在 Windows 会读注册表里的系统代理，几百 MB 的 nvidia 轮子必卡死 → 用 curl 分片并行从清华镜像下载，再 `pip --no-index --find-links` 离线装
@@ -148,7 +148,7 @@ def verify(env: str) -> None:
             "print('paddle',paddle.__version__,'cuda',paddle.device.is_compiled_with_cuda(),'paddleocr',paddleocr.__version__,'paddlex',paddlex.__version__)")
     r = sh([py, "-c", code])
     print(r.stdout.strip() or r.stderr[-800:])
-    cache = os.path.join(os.path.expanduser("~"), ".paddlex", "official_models")
+    cache = os.path.join(os.environ.get("PADDLE_PDX_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".paddlex"), "official_models")
     have = sorted(os.listdir(cache)) if os.path.isdir(cache) else []
     need = ["PP-OCRv6_medium_det", "PP-OCRv6_medium_rec", "PP-DocLayoutV3", "PaddleOCR-VL-1.6"]
     missing = [n for n in need if n not in have]

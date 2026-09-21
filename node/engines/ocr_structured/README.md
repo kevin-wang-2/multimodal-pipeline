@@ -38,6 +38,8 @@ python node\engines\ocr_structured\setup_env.py verify --env ocrlab
 
 验证状态：`verify` 对 lab 的 `ocrlab` 环境通过；`create` 的索引解析在两个源上都能定位到正确 wheel；**没有做过一次全新重装计时**（2.3 GB）。
 
+模型缓存默认在 `~/.paddlex`；以别的账号跑 A（比如 CI runner 的服务账号）时用 `PADDLE_PDX_CACHE_HOME` 指过去，否则会重新下载 2 GB。
+
 ## 接到 A
 
 ```toml
@@ -45,7 +47,7 @@ python node\engines\ocr_structured\setup_env.py verify --env ocrlab
 module = "engines.ocr_structured"
 python = "C:/ProgramData/miniconda3/envs/ocrlab/python.exe"
 timeout_sec = 240
-env = { PADDLE_PDX_MODEL_SOURCE = "modelscope", MMP_OCR_PRELOAD_VL = "1" }   # VL 冷加载 ~76s 是启动成本；不想常驻就设 0
+env = { PADDLE_PDX_MODEL_SOURCE = "modelscope", PADDLE_PDX_CACHE_HOME = "C:/Users/Admin/.paddlex", MMP_OCR_PRELOAD_VL = "1" }   # VL 冷加载 ~76s 是启动成本；不想常驻就设 0
 
 [scheduler]
 vram_total_mb = 16303

@@ -45,9 +45,9 @@ B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后�
 
 | 项 | 怎么验 | 状态 |
 |---|---|---|
-| 本机 OpenClaw 发一段音频 → B-py → A → digest 注入回对话 | 飞书 / 微信发语音，看回复是否体现时间轴信息 | 待联调（要动本地 OpenClaw，需用户点头） |
-| 关掉 A 后 OpenClaw 仍能回复且注入块标注降级 | 停 lab 的 `mmp-node` 任务再发语音 | 联调中：0.1.1 时 A 停后 CLI exit 2 → 平台条目只声明 `audio`、附件被判 `video` 而未运行 → prompt 无块 → 钩子无从标注（静默降级）。0.1.2：平台条目加 `video`，钩子增加"无块只有附件引用"这一级 |
-| 同一媒体连续追问 5 轮不重复推理 | 看 A 日志：同一 media_id 只有一次 triage 任务 | 待联调 |
+| 本机 OpenClaw 发一段音频 → B-py → A → digest 注入回对话 | 发语音，看 A 日志有 triage 任务、回复体现时间轴信息 | ✅ 2026-09-21：mindweave 语音 → `mmp-triage` → 内网 B-py → A（日志 20:31:11、20:33:00 两条 triage.audio），回复引用了 VAD / ASR 结果 |
+| 关掉 A 后 OpenClaw 仍能回复且注入块标注降级 | 停 lab 的 `mmp-node` 任务再发语音 | ✅ 2026-09-21：A 停后仍能回复；CLI exit 2 → 回落到下一条目（`openclaw infer audio transcribe` 实测 openai 条目被调用）。降级标注由钩子做，两级说明有单测；实况里 0.1.1 曾静默降级（附件被判 video，见上一节），0.1.2 的钩子按"无块只剩附件引用"补上，实况待下次 A 停机顺带看 |
+| 同一媒体连续追问 5 轮不重复推理 | 看 A 日志：同一 media_id 只有一次 triage 任务 | ✅ 2026-09-21：对同一语音追问数轮，A 日志无新任务（OpenClaw 每个附件只理解一次，注入块随历史保留） |
 | `mmp-triage` 三条路径 | `--check`、真实 m4a、B 不可达 exit 2 | ✅ 2026-09-21 |
 
 ## 附件被判成 video 的问题

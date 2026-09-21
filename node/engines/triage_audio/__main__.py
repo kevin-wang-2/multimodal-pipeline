@@ -116,6 +116,13 @@ def triage(m: Models, media_id: str, path: str, params: dict) -> dict:
         tools["audio_tagging"] = "failed"
     timings["tagging"] = int((time.monotonic() - t0) * 1000)
 
+    # 2b) VAD 漏检补救：VAD 判非语音、但打标 Speech ≥ 阈值的段也当语音跑 ASR（结果-T6 样本 #10：一句话被 VAD 整段漏掉，打标 Speech 0.98）
+    for s in segs:
+        if not s.speech and not s.tag_failed:
+            if max((l["score"] for l in s.labels if l["tag"] == "Speech"), default=0.0) >= th:
+                s.speech = True
+                s.vad_missed = True
+
     # 3) 只对语音段跑 ASR
     t0 = time.monotonic()
     speech_segs = [s for s in segs if s.speech]

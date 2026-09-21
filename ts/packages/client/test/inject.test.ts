@@ -44,6 +44,14 @@ test("unclassified segments and long timelines fold", () => {
   assert.equal(out.split("\n").filter((l) => l.startsWith("- [")).length, 10);
 });
 
+test("low-confidence speech shows the tagger's evidence instead of a guessed cause", () => {
+  const d = load("s2_m0_hum_then_speech.json");
+  const seg = { start: 0.61, end: 1.09, labels: [{ tag: "Sound effect", score: 0.62 }], label_status: "ok", asr: { text: "Yeah.", lang: "en", confidence: 0 } };
+  const out = renderDigest({ ...d, segments: [seg as any, ...d.segments] } as Digest);
+  assert.match(out, /- \[0\.61, 1\.09\) 语音（低置信 0\.00，打标 Sound effect 0\.62）：「Yeah\.」 \(en\)/);
+  assert.ok(!out.includes("喷麦"));
+});
+
 test("unavailable block names the reason and carries the fallback text", () => {
   const out = renderUnavailable("no_node", "平台转写的一整段文字");
   assert.equal(out.split("\n")[0], "[mmp:digest unavailable]");

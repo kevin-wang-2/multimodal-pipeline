@@ -23,6 +23,7 @@ class RawSegment:
     tag_failed: bool = False
     asr: dict | None = None                                  # {text, lang, confidence?}；语音段失败为 None
     asr_failed: bool = False
+    vad_missed: bool = False                                 # VAD 判非语音、但打标 Speech ≥ 阈值 → 补跑了 ASR
 
 
 def timeline(duration: float, speech: list[tuple[float, float]]) -> list[RawSegment]:
@@ -72,11 +73,18 @@ def build_digest(media_id: str, duration: float, segs: list[RawSegment], tools: 
                 asr = {"text": s.asr.get("text", ""), "lang": s.asr.get("lang") or "n/a"}
                 asr["confidence"] = s.asr["confidence"] if isinstance(s.asr.get("confidence"), (int, float)) else "n/a"
                 seg["asr"] = asr
+                dur_ms = int((s.end - s.start) * 1000)
+                top_txt = f"{s.labels[0]['tag']} {s.labels[0]['score']:.2f}" if s.labels else "无明确类别"
+                if s.vad_missed:
+                    gaps.append(f"{span} VAD 未判为语音，但打标 Speech {asr['confidence']:.2f} ≥ 阈值 → 已补跑 ASR：「{asr['text']}」")
                 if not asr["text"].strip():
                     gaps.append(f"{span} 为语音段，但 ASR 无输出 → 内容未知")
                 elif isinstance(asr["confidence"], (int, float)) and asr["confidence"] < threshold:
-                    top_txt = f"{s.labels[0]['tag']} {s.labels[0]['score']:.2f}" if s.labels else "无"
-                    gaps.append(f"{span} 被 VAD 判为语音，但打标未见 Speech（top {top_txt}）→ ASR 文本「{asr['text']}」不可靠，可能是喷麦 / 呼吸")
+                    # 只陈述事实，不猜原因：可能是喷麦，也可能是哼唱 / 唱的一个音 / 太短的一句话
+                    note = f"{span} 被 VAD 判为语音，但打标 Speech 仅 {asr['confidence']:.2f}（top {top_txt}）→ ASR 文本「{asr['text']}」置信度低"
+                    if dur_ms < 1000:
+                        note += f"；段长 {dur_ms}ms，打标在这么短的段上本身也不可靠"
+                    gaps.append(note)
             else:
                 gaps.append(f"{span} 为语音段，但 ASR 失败 → 内容未知")
         else:

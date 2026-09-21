@@ -33,9 +33,12 @@ export function renderDigest(d: Digest, o: RenderOptions = {}): string {
     const span = `[${fmt(s.start)}, ${fmt(s.end)})`;
     if (s.asr && typeof s.asr === "object") {
       const lang = s.asr.lang && s.asr.lang !== "n/a" ? ` (${s.asr.lang})` : "";
-      // asr.confidence 是打标 Speech 分数的代理（triage.audio 引擎）；低于阈值 = VAD 判语音但打标没听到 Speech，多半是喷麦 / 呼吸被幻觉成词
+      // asr.confidence 是打标 Speech 分数的代理（triage.audio 引擎）；低于阈值 = VAD 判语音但打标没听到 Speech（喷麦、哼唱、太短的一句话都可能）
       const low = typeof s.asr.confidence === "number" && s.asr.confidence < threshold;
-      return low ? `- ${span} 语音（低置信，可能是喷麦 / 呼吸）：「${s.asr.text}」${lang}` : `- ${span} 语音：「${s.asr.text}」${lang}`;
+      if (!low) return `- ${span} 语音：「${s.asr.text}」${lang}`;
+      // 低置信：把打标的原始判断一起给主模型，不替它猜是喷麦还是哼唱
+      const top = s.label_status === "ok" && s.labels.length ? `打标 ${s.labels[0].tag} ${s.labels[0].score.toFixed(2)}` : "打标无明确类别";
+      return `- ${span} 语音（低置信 ${(s.asr.confidence as number).toFixed(2)}，${top}）：「${s.asr.text}」${lang}`;
     }
     if (s.asr === undefined) return `- ${span} 语音：ASR 失败，内容未知`;
     const labels = s.label_status === "ok"

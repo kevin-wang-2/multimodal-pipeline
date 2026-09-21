@@ -49,7 +49,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
 
 - [x] **M0 手工验证**（2026-09-10）：VAD 定界 → 段级打标 → ASR → 组装 digest → 隔离模型实例盲测，**选对工具、指对时间段**；digest schema 收敛。
 - [x] 文档 / 图像腿实测（2026-09-17）：三档 OCR 跑通，"快档预扫 + 按页升级"成立，runner 必须排队。
-- [ ] **T6 真实音频复验**（进行中，n = 1 / ≥ 10）：样本 #1 口哨 + 口述（风噪、喷麦）——口哨 `Whistling 0.95`、指令逐字全对；暴露 VAD 假阳性 → `asr.confidence` 用打标 Speech 分数、A 侧 ffmpeg 转码。见 [docs/结果-T6.md](docs/结果-T6.md)。
+- [ ] **T6 真实音频复验**（n = 10 / ≥ 10 样本已跑，盲测待做）：口哨 `Whistling 0.95`、纯语音 / 英文 / 中英混 / 压在音乐上的话 ASR 基本逐字对；VAD 假阳性与漏检都靠打标识破并写进 gaps；A 侧 ffmpeg 转码。见 [docs/结果-T6.md](docs/结果-T6.md)。
 - [ ] **M1 infra 骨架**：A 的队列 / 缓存 / 引擎池 + 出站 ws；B 协议 + py/ts 两个实现；C 的 ts 包。只挂两个任务类型：`triage.audio`（CPU）与 `ocr.structured`（GPU）。步骤见 [docs/实施计划.md](docs/实施计划.md)。
   - [x] S0 协议定稿（2026-09-19）：[docs/协议.md](docs/协议.md) + `protocol/`，py / ts 契约测试全绿。
   - [x] S1 A 核心 + B-py 绑定模式 + CI（2026-09-20）：`node/`，`echo` 任务类型跑通队列 / 缓存 / 句柄 / 注册表 / 任务 API，18 项验收测试。

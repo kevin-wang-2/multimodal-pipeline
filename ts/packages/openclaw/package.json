@@ -1,0 +1,54 @@
+{
+  "name": "@mmp/openclaw",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "multimodal-pipeline 的 OpenClaw 适配：mmp-triage CLI（作为 tools.media 的 cli 模型条目，把音频变成带时间轴的 digest 注入块）+ 一个极小的 before_prompt_build 钩子（预检不可用时显式标注降级）。",
+  "license": "Apache-2.0",
+  "bin": {
+    "mmp-triage": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://mmp.seanartech.com/npm/",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kevin-wang-2/multimodal-pipeline",
+    "directory": "ts/packages/openclaw"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@mmp/client": "workspace:^"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "runtimeExtensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.7.0",
+      "minGatewayVersion": "2026.7.0"
+    },
+    "hostVersion": ">=2026.7.0   (运行在 OpenClaw 进程内；不作为 peerDependency 声明，避免 pnpm 把整个 openclaw 装进工作区)"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

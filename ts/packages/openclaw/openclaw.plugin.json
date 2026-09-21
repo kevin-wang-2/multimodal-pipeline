@@ -1,0 +1,11 @@
+{
+  "id": "mmp",
+  "name": "multimodal-pipeline",
+  "description": "预检不可用时在 prompt 前显式标注降级；音频预检本身由 tools.media 的 cli 条目 mmp-triage 完成。",
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

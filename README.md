@@ -94,6 +94,7 @@ ts/                    pnpm workspace
   packages/protocol/   schema 加载、ajv 校验、从 protocol/schemas 生成的 TS 类型（pnpm gen-types）
   packages/broker/     B-ts：core（操作层）、ws（A 连入）、http（任务 API）、cli（独立模式 mmp-broker）
   packages/client/     C：@mmp/client——submit / wait / cancel / capabilities、MmpError 分类、digest → 注入块模板
+  packages/openclaw/   OpenClaw 适配：mmp-triage CLI（tools.media 的 cli 条目）+ 降级标注钩子
 .gitea/workflows/      ci.yml（unit：契约 + ts + node 验收）、gpu.yml（windows runner：真模型冒烟 + Windows 全套）
 docs/
   架构.md              设计文档（公开版）
@@ -105,6 +106,7 @@ docs/
   结果-公网端到端.md    S4/S5 公网验收：枢纽机 B-ts + 内网 A，零监听扫描、句柄往返
   包发布.md             @mmp/* 的私有 registry：安装、发布、账号
   接入指南.md           给宿主工程师：装包、配置、用法、必须遵守的规则
+  宿主接入-OpenClaw.md  OpenClaw 的接法（cli 条目 + 钩子）、内网侧宿主与 B 的对应、验收清单
   结果-T6.md            真实音频复验：10 段手机录音逐样本记录、由此改的规则、盲测 10/10（原文在附录）
 tools/
   make_test_clip.py    生成 M0 合成素材（2s 哼唱 + 2s 口述）

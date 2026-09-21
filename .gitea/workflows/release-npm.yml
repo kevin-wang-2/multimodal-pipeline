@@ -33,7 +33,7 @@ jobs:
         run: |
           test -n "$MMP_NPM_AUTH" || { echo "secret MMP_NPM_AUTH missing"; exit 1; }
           echo "//mmp.seanartech.com/npm/:_auth=$MMP_NPM_AUTH" >> ~/.npmrc
-          for p in protocol broker client; do
+          for p in protocol broker client openclaw; do
             (cd packages/$p && pnpm publish --no-git-checks) || exit 1
           done
         working-directory: ts

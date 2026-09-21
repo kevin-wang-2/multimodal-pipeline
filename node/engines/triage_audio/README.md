@@ -43,9 +43,14 @@ env = { MMP_MODELS_DIR = "/path/to/models", MMP_ENGINE_THREADS = "4" }
 
 双阈值：起点 0.20、终点 0.50、32 ms 帧、起点回补一帧、最短语音 / 静音 0.25 s。为什么不用 sherpa 的封装、实测数字见 [docs/结果-T2.md](../../../docs/结果-T2.md) 的 2026-09-20 复测。
 
+## 真实音频后加的两条规则（[结果-T6.md](../../../docs/结果-T6.md) 样本 #1）
+
+- 语音段 `asr.confidence` = 打标 `Speech` 分数：喷麦 / 呼吸 / 口哨起音被 VAD 判成语音后，SenseVoice 会幻觉出一两个词；这些段 Speech 分数为 0，低于阈值进 gaps，文本保留不删。
+- 不合并短间隔的语音段（`merge_gap_sec` 默认 0）：合并在打标前发生，会抹掉夹在两句话之间的一声口哨。改由 gaps 点出"夹在两段语音之间的短非语音（时长、标签）"。
+
 ## 边界
 
-- M1 只接 PCM WAV（8/16/24/32 bit，任意采样率与声道数，线性插值重采到 16k）；其他容器 → `400 bad_request`。
+- 引擎本身只接 PCM WAV（8/16/24/32 bit，任意采样率与声道数，线性插值重采到 16k）；m4a / mp3 / ogg / flac / amr 等由 A 用 ffmpeg 转码后送进来（`mmp_node/transcode.py`），A 没有 ffmpeg 时 → `400 bad_request`。
 - `capabilities_available` 是固定清单（T4 的 7 项），M2 起由注册表按媒体特征筛。
 - 工具部分失败不中断：`tools` 里标 `failed` / `partial`，gaps 里说明，A 把 `source.degraded` 置 true。
 

@@ -61,18 +61,7 @@ class EngineProcess:
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **self.spec.env},
         )
         self._stderr = asyncio.create_task(self._pump_stderr())
-        try:
-            line = await asyncio.wait_for(self.proc.stdout.readline(), self.start_timeout)
-        except asyncio.TimeoutError:
-            await self.kill()
-            raise ApiError("engine_failed", f"engine {self.spec.name} did not say hello within {self.start_timeout}s")
-        if not line:
-            await self.kill()
-            raise ApiError("engine_failed", f"engine {self.spec.name} exited before hello")
-        hello = json.loads(line)
-        if hello.get("type") != "hello":
-            await self.kill()
-            raise ApiError("engine_failed", f"engine {self.spec.name} first line was not hello: {hello!r}")
+        hello = await self._wait_hello()
         want = {t["engine_version"] for (_, _), t in self.spec.tiers.items() if t["engine"] == hello.get("engine")}
         if want and hello.get("engine_version") not in want:
             await self.kill()
@@ -81,6 +70,36 @@ class EngineProcess:
         self.hello = hello
         self._reader = asyncio.create_task(self._pump_stdout())
         log.info("engine %s started pid=%s version=%s", self.spec.name, self.proc.pid, hello.get("engine_version"))
+
+    async def _wait_hello(self) -> dict:
+        """等 hello。加载期间引擎可以发 log，第三方库也可能往 stdout 打非 JSON 的东西——都记日志跳过，只有超时 / 退出 / 非 hello 的协议消息才算失败。"""
+        assert self.proc and self.proc.stdout
+        deadline = asyncio.get_running_loop().time() + self.start_timeout
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                await self.kill()
+                raise ApiError("engine_failed", f"engine {self.spec.name} did not say hello within {self.start_timeout}s")
+            try:
+                line = await asyncio.wait_for(self.proc.stdout.readline(), remaining)
+            except asyncio.TimeoutError:
+                await self.kill()
+                raise ApiError("engine_failed", f"engine {self.spec.name} did not say hello within {self.start_timeout}s")
+            if not line:
+                await self.kill()
+                raise ApiError("engine_failed", f"engine {self.spec.name} exited before hello (rc={self.proc.returncode})")
+            try:
+                msg = json.loads(line.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                log.info("[%s] (pre-hello stdout) %s", self.spec.name, line[:200].decode(errors="replace").rstrip())
+                continue
+            if msg.get("type") == "log":
+                log.log(logging.getLevelName(msg.get("level", "info").upper()), "[%s] %s", self.spec.name, msg.get("message"))
+                continue
+            if msg.get("type") != "hello":
+                await self.kill()
+                raise ApiError("engine_failed", f"engine {self.spec.name} sent {msg.get('type')!r} before hello")
+            return msg
 
     async def _pump_stderr(self) -> None:
         assert self.proc and self.proc.stderr

@@ -18,6 +18,10 @@ from typing import Awaitable, Callable
 PROTOCOL_VERSION = "1.1"
 RunFn = Callable[[dict, asyncio.Event], Awaitable[tuple[object, dict]]]
 
+# 协议帧只走原始 stdout 的字节流；之后把 sys.stdout 指到 stderr，第三方库的 print 就污染不了 JSON 流
+_PROTO_OUT = sys.stdout.buffer
+sys.stdout = sys.stderr
+
 
 class BadParams(Exception):
     pass
@@ -25,8 +29,8 @@ class BadParams(Exception):
 
 def _emit(msg: dict) -> None:
     # 直接写字节：Windows 上 sys.stdout 的文本层可能是 GBK，且会把 \n 翻成 \r\n
-    sys.stdout.buffer.write((json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8"))
-    sys.stdout.buffer.flush()
+    _PROTO_OUT.write((json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8"))
+    _PROTO_OUT.flush()
 
 
 def log(message: str, level: str = "info") -> None:

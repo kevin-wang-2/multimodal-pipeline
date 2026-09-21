@@ -37,3 +37,4 @@ node/node.toml
 *.egg-info/
 node/.smoke-cache/
 ci-out/
+node/.smoke-cache-ocr/

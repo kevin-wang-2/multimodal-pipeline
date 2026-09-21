@@ -2,7 +2,7 @@
 # 跑 node 验收（Windows 路径）+ triage.audio 真模型冒烟（M0 素材）。
 # 机器上一次性准备（见 node/engines/triage_audio/README.md）：
 #   conda env mmp-node（py3.12，装 node[dev]）、mmp-audio（py3.12 + sherpa-onnx/onnxruntime/numpy）
-#   C:\mmp\models 三件套、C:\mmp\testdata 两段 M0 素材
+#   C:\mmp\models 三件套、C:\mmp\testdata 两段 M0 素材；conda env ocrlab（node/engines/ocr_structured/setup_env.py）与 T5 发票素材（不进仓库）
 # 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）；说明只写在 YAML 注释里。
 # 批处理里调 .cmd 垫片（pnpm / npm / npx）必须写 call，否则控制权转移、后面的行不执行。
 name: gpu
@@ -21,6 +21,8 @@ jobs:
       MMP_ENGINE_PYTHON: C:\ProgramData\miniconda3\envs\mmp-audio\python.exe
       MMP_MODELS_DIR: C:\mmp\models
       MMP_SMOKE_WAVS: C:\mmp\testdata
+      MMP_OCR_PYTHON: C:\ProgramData\miniconda3\envs\ocrlab\python.exe
+      MMP_OCR_INVOICES: C:\Users\Admin\ocrlab\out\inv
     steps:
       - name: Checkout
         shell: cmd
@@ -64,3 +66,9 @@ jobs:
           if not exist ci-out mkdir ci-out
           set MMP_SMOKE_DUMP=ci-out
           %PY_NODE% node\tools\smoke_triage_audio.py || exit /b 1
+      - name: ocr.structured smoke (PP-OCRv6 + PaddleOCR-VL on the T5 invoices, stays on this machine)
+        shell: cmd
+        run: |
+          @echo off
+          %MMP_OCR_PYTHON% node\engines\ocr_structured\setup_env.py verify --env ocrlab || exit /b 1
+          %PY_NODE% node\tools\smoke_ocr_structured.py || exit /b 1

@@ -53,6 +53,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
   - [x] S0 协议定稿（2026-09-19）：[docs/协议.md](docs/协议.md) + `protocol/`，py / ts 契约测试全绿。
   - [x] S1 A 核心 + B-py 绑定模式 + CI（2026-09-20）：`node/`，`echo` 任务类型跑通队列 / 缓存 / 句柄 / 注册表 / 任务 API，18 项验收测试。
   - [x] S2 `triage.audio` 引擎（2026-09-20）：三件套跑在子进程，双阈值 VAD 切点 −16ms，26s 素材 847ms（0.68× T2）；`gpu` job 跑真模型冒烟。
+  - [x] S5 `ocr.structured` 引擎（2026-09-21）：PP-OCRv6 快档 + PaddleOCR-VL 慢档同一子进程，VRAM 按 tier 记账（VL 并发 2 → 第二个排队），快档每页给升级信号；T5 发票 12/12 字段。公网端到端待公网主机（同 S4）。
   - [x] S4 A↔B WebSocket + B-ts（2026-09-21）：`ts/packages/broker`，A 出站 ws 重连重注册，B-py / B-ts 跑同一批行为契约场景；协议 v1.1 加媒体 `ref` 避免重复拉取。
 - [ ] M2 能力层（工具注册表 + 首批 head）
 - [ ] M3 预算与反馈升级
@@ -81,8 +82,8 @@ protocol/
 node/
   mmp_node/            A 算力节点：队列、缓存（SQLite）、引擎池（子进程）、注册表、媒体句柄、A↔B 分发
   mmp_broker/          B 的 Python 实现：操作层（core）、HTTP 绑定（FastAPI）、进程内绑定（inproc）
-  engines/             引擎子进程，JSON-lines over stdio；echo（S1 测试引擎）、triage_audio（音频预检，见其 README）
-  tools/               smoke_triage_audio.py：真模型冒烟（CI gpu job）
+  engines/             引擎子进程，JSON-lines over stdio；echo（S1 测试引擎）、triage_audio（音频预检）、ocr_structured（文档 OCR 快 / 慢两档），各有 README
+  tools/               smoke_triage_audio.py / smoke_ocr_structured.py：真模型冒烟（CI gpu job）
   tests/               S1 验收测试（经完整栈：HTTP → Broker → 信封 → Node → 子进程）
   node.toml.example    全部阈值外置；MMP_<SECTION>__<KEY> 环境变量覆盖
 ts/                    pnpm workspace

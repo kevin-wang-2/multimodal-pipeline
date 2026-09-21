@@ -47,7 +47,7 @@ python node\engines\ocr_structured\setup_env.py verify --env ocrlab
 module = "engines.ocr_structured"
 python = "C:/ProgramData/miniconda3/envs/ocrlab/python.exe"
 timeout_sec = 240
-env = { PADDLE_PDX_MODEL_SOURCE = "modelscope", PADDLE_PDX_CACHE_HOME = "C:/Users/Admin/.paddlex", MMP_OCR_PRELOAD_VL = "1" }   # VL 冷加载 ~76s 是启动成本；不想常驻就设 0
+env = { PADDLE_PDX_MODEL_SOURCE = "modelscope", PADDLE_PDX_CACHE_HOME = "C:/mmp/paddlex", MMP_OCR_PRELOAD_VL = "1" }   # VL 冷加载 ~76s 是启动成本；不想常驻就设 0
 
 [scheduler]
 vram_total_mb = 16303

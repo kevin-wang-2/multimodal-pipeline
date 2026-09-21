@@ -3,7 +3,7 @@
 # 机器上一次性准备（见 node/engines/triage_audio/README.md）：
 #   conda env mmp-node（py3.12，装 node[dev]）、mmp-audio（py3.12 + sherpa-onnx/onnxruntime/numpy）
 #   C:\mmp\models 三件套、C:\mmp\testdata 两段 M0 素材；conda env ocrlab（node/engines/ocr_structured/setup_env.py）与 T5 发票素材（不进仓库）
-# runner 以服务账号运行，~ 不是 Admin：paddlex 模型缓存要用 PADDLE_PDX_CACHE_HOME 指到 Admin 的 .paddlex，否则冒烟会重新下载 2 GB。
+# runner 以服务账号运行，~ 不是 Admin 且没权限进 Admin 主目录：模型缓存复制到 C:\mmp\paddlex（icacls 给 Users 修改权），PADDLE_PDX_CACHE_HOME 指过去。
 # 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）；说明只写在 YAML 注释里。
 # 批处理里调 .cmd 垫片（pnpm / npm / npx）必须写 call，否则控制权转移、后面的行不执行。
 name: gpu
@@ -24,7 +24,7 @@ jobs:
       MMP_SMOKE_WAVS: C:\mmp\testdata
       MMP_OCR_PYTHON: C:\ProgramData\miniconda3\envs\ocrlab\python.exe
       MMP_OCR_INVOICES: C:\Users\Admin\ocrlab\out\inv
-      PADDLE_PDX_CACHE_HOME: C:\Users\Admin\.paddlex
+      PADDLE_PDX_CACHE_HOME: C:\mmp\paddlex
       PADDLE_PDX_MODEL_SOURCE: modelscope
     steps:
       - name: Checkout

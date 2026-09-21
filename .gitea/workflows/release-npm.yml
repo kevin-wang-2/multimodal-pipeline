@@ -1,0 +1,39 @@
+# 把 ts/packages/* 发到私有 registry https://mmp.seanartech.com/npm/（枢纽机 Verdaccio）。
+# 触发：手动，或推 tag `npm-v*`。版本号以各包 package.json 为准；同版本重复发布会被 registry 拒绝（E409），先 bump。
+# 认证：仓库 secret MMP_NPM_AUTH = base64("mmp-publisher:<密码>")。
+name: release-npm
+on:
+  workflow_dispatch:
+  push:
+    tags: ["npm-v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -q .
+          git remote add origin ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git
+          git -c http.extraHeader="Authorization: token $TOKEN" fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q -f FETCH_HEAD
+      - name: Build and test
+        run: |
+          npm install -g --silent pnpm@10
+          pnpm install --frozen-lockfile
+          pnpm -r build
+          pnpm -r test
+        working-directory: ts
+      - name: Publish @mmp/*
+        env:
+          MMP_NPM_AUTH: ${{ secrets.MMP_NPM_AUTH }}
+        run: |
+          test -n "$MMP_NPM_AUTH" || { echo "secret MMP_NPM_AUTH missing"; exit 1; }
+          echo "//mmp.seanartech.com/npm/:_auth=$MMP_NPM_AUTH" >> ~/.npmrc
+          for p in protocol broker client; do
+            (cd packages/$p && pnpm publish --no-git-checks) || exit 1
+          done
+        working-directory: ts

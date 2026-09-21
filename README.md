@@ -54,7 +54,7 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
   - [x] S1 A 核心 + B-py 绑定模式 + CI（2026-09-20）：`node/`，`echo` 任务类型跑通队列 / 缓存 / 句柄 / 注册表 / 任务 API，18 项验收测试。
   - [x] S2 `triage.audio` 引擎（2026-09-20）：三件套跑在子进程，双阈值 VAD 切点 −16ms，26s 素材 847ms（0.68× T2）；`gpu` job 跑真模型冒烟。
   - [x] S5 `ocr.structured` 引擎（2026-09-21）：PP-OCRv6 快档 + PaddleOCR-VL 慢档同一子进程，VRAM 按 tier 记账（VL 并发 2 → 第二个排队），快档每页给升级信号；T5 发票 12/12 字段。
-  - [x] S3 前半：`@mmp/client`（2026-09-21）：客户端包 + 注入模板，三个 ts 包可 `pnpm pack` 发布；OpenClaw / 宿主适配层待联调。
+  - [x] S3 前半：`@mmp/client`（2026-09-21）：客户端包 + 注入模板；三个 ts 包发布在私有 registry `https://mmp.seanartech.com/npm/`（[docs/包发布.md](docs/包发布.md)）；宿主适配层待联调。
   - [x] 公网端到端（2026-09-21）：枢纽机 nginx 443 + B-ts，内网 GPU 机 A 出站 wss；echo / 音频 / OCR 两档经 get+put 句柄往返，结果 PUT 回宿主；公网 nmap A 机 0 open。见 [docs/结果-公网端到端.md](docs/结果-公网端到端.md)。
   - [x] S4 A↔B WebSocket + B-ts（2026-09-21）：`ts/packages/broker`，A 出站 ws 重连重注册，B-py / B-ts 跑同一批行为契约场景；协议 v1.1 加媒体 `ref` 避免重复拉取。
 - [ ] M2 能力层（工具注册表 + 首批 head）
@@ -101,6 +101,7 @@ docs/
   结果-T1.md … T5      每组实验的原始记录（负结果也记）
   结果-网络测试.md      一次网络吞吐排查的复盘（教训：别用 ssh 管道测网速）
   结果-公网端到端.md    S4/S5 公网验收：枢纽机 B-ts + 内网 A，零监听扫描、句柄往返
+  包发布.md             @mmp/* 的私有 registry：安装、发布、账号
 tools/
   make_test_clip.py    生成 M0 合成素材（2s 哼唱 + 2s 口述）
   t2_sensevoice.py     VAD + SenseVoice 基准

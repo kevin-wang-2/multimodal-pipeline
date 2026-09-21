@@ -37,7 +37,8 @@
     "README.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "registry": "https://mmp.seanartech.com/npm/",
+    "access": "restricted"
   },
   "repository": {
     "type": "git",

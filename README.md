@@ -102,6 +102,7 @@ docs/
   结果-网络测试.md      一次网络吞吐排查的复盘（教训：别用 ssh 管道测网速）
   结果-公网端到端.md    S4/S5 公网验收：枢纽机 B-ts + 内网 A，零监听扫描、句柄往返
   包发布.md             @mmp/* 的私有 registry：安装、发布、账号
+  接入指南.md           给宿主工程师：装包、配置、用法、必须遵守的规则
 tools/
   make_test_clip.py    生成 M0 合成素材（2s 哼唱 + 2s 口述）
   t2_sensevoice.py     VAD + SenseVoice 基准

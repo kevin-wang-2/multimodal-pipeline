@@ -70,16 +70,17 @@ B 是**角色**不是部署单元：内网可达的 C 直连"A/B 绑定"的 B；
 | 音频 GPU 档 | whisper.cpp 原生 sm_120 构建，**21.8× 实时**；模型加载 0.9s 占短音频总时七成 | [T1](docs/结果-T1.md) |
 | 边界检测 | 双阈值 Silero VAD 切点误差 −16ms（sherpa 默认封装 +182ms） | [T2 复测](docs/结果-T2.md) |
 | 端到端盲测 | 只凭 digest 选对 `pitch_transcribe` 并指对 0.00–2.18s | [T4](docs/结果-T4.md) |
+| 真实音频 | 口哨 `Whistling 0.957`；风噪 + 喷麦下指令句 ASR 逐字对；58 s 混合音频推理 984 ms | [T6](docs/结果-T6.md) |
 | 文档 OCR 快档（GPU） | PP-OCRv6 **0.4–0.5 s/页**，CER 约 1% | [T5](docs/结果-T5-文档OCR.md) |
 | 文档 OCR 慢档（GPU） | PaddleOCR-VL 0.9B **约 9 s/页、12GB 显存**，出版面结构与印章 | [T5](docs/结果-T5-文档OCR.md) |
 
-⚠️ 音频结论全部建立在**合成素材**（TTS 语音 + 正弦哼唱）上，真实音频复验待做。
+音频腿的真实素材复验见 [T6](docs/结果-T6.md)：10 段手机录音，ASR 基本逐字对，VAD 假阳性 / 漏检靠打标识破；合成哼唱当年的 `Boing 0.12` 在真口哨上是 `Whistling 0.95`。
 
 ## 仓库结构
 
 ```
 protocol/
-  schemas/             五个 JSON Schema（A↔B 消息 / 任务 API / 媒体句柄 / digest / 能力元数据），语言中立的唯一源头
+  schemas/             六个 JSON Schema（A↔B 消息 / 任务 API / 媒体句柄 / digest / 能力元数据 / 引擎 IO），语言中立的唯一源头
   fixtures/            契约测试样本（含 M0 的 digest）
   tests/py, tests/ts   同一批 fixtures 在 jsonschema 与 ajv 两侧的契约测试
 node/
@@ -96,7 +97,7 @@ ts/                    pnpm workspace
 .gitea/workflows/      ci.yml（unit：契约 + ts + node 验收）、gpu.yml（windows runner：真模型冒烟 + Windows 全套）
 docs/
   架构.md              设计文档（公开版）
-  协议.md              协议 v1.0 人读版，与 protocol/schemas 同步
+  协议.md              协议 v1.1 人读版，与 protocol/schemas 同步
   实施计划.md          M1 的步骤拆分、验收与顺序（S0–S6）
   M0-测试计划.md        M0 四组实验的计划
   结果-T1.md … T5      每组实验的原始记录（负结果也记）

@@ -4,6 +4,7 @@
 #   conda env mmp-node（py3.12，装 node[dev]）、mmp-audio（py3.12 + sherpa-onnx/onnxruntime/numpy）
 #   C:\mmp\models 三件套、C:\mmp\testdata 两段 M0 素材
 # 注意 Windows runner 的 run: 块必须是纯 ASCII（cmd.exe 按 GBK 读 UTF-8 脚本会截断）；说明只写在 YAML 注释里。
+# 批处理里调 .cmd 垫片（pnpm / npm / npx）必须写 call，否则控制权转移、后面的行不执行。
 name: gpu
 on:
   push:
@@ -48,9 +49,10 @@ jobs:
         run: |
           @echo off
           node --version
-          pnpm --version
-          pnpm install --frozen-lockfile || exit /b 1
-          pnpm -r build || exit /b 1
+          call pnpm --version
+          call pnpm install --frozen-lockfile || exit /b 1
+          call pnpm -r build || exit /b 1
+          dir packages\broker\dist\cli.js || exit /b 1
       - name: Node acceptance on Windows (echo + triage.audio real model + ws vs B-ts)
         shell: cmd
         working-directory: node

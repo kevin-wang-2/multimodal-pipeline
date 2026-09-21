@@ -230,7 +230,7 @@ async def test_media_ref_skips_refetch(stack, media_server):
     r2 = await stack.submit(type="echo", media={"ref": mid}, params={"tag": "second"}, wait=5)
     assert r2.status_code == 200 and r2.json()["cached"] is False and r2.json()["media_id"] == mid
     assert _Handler.gets == hits_after_first
-    assert r2.json()["timings_ms"]["fetch"] <= 5
+    assert r2.json()["timings_ms"]["fetch"] <= 100   # 命中只是 SQLite touch + stat（Windows 上 ~16ms）；真正的不变量是上一行的 GET 计数
     # ref + get：本地有 → 也不下载
     r3 = await stack.submit(type="echo", media={"ref": mid, "get": ep}, params={"tag": "third"}, wait=5)
     assert r3.status_code == 200 and _Handler.gets == hits_after_first

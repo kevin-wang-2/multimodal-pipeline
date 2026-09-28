@@ -36,11 +36,8 @@ function Install-Node {
 }
 
 function Restart-Node {
-    & schtasks.exe /End /TN $Task 2>$null | Out-Null
-    Get-CimInstance Win32_Process |
-        Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match '(mmp_broker\.main|-m engines\.)' } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    & schtasks.exe /Run /TN $Task | Out-Null
+    & cmd.exe /d /c "schtasks.exe /End /TN `"$Task`" >nul 2>&1"
+    & cmd.exe /d /c "schtasks.exe /Run /TN `"$Task`" >nul 2>&1"
     if ($LASTEXITCODE -ne 0) { throw "failed to start scheduled task $Task" }
 }
 

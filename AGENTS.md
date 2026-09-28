@@ -26,10 +26,10 @@
 ## Git and hosting
 
 - `origin` is the private Gitea development remote and the only development source of truth. CI and internal issues run there.
-- `github` is a public, read-only mirror. Do not develop or accept divergent commits there.
+- `github` is a public, read-only mirror. Do not develop or accept divergent commits there; Gitea mirror synchronization may overwrite divergent GitHub refs.
 - Local `main` tracks `origin/main`. Push normal work to `origin`; GitHub synchronization is performed only by the mirror automation after Linux and Windows GPU CI pass for the same SHA.
 - Use a Gitea server-side push mirror with `sync_on_commit` disabled. The CI gate requests a mirror sync only after both suites pass; GitHub credentials must remain in Gitea and must not be exposed to runners.
-- Public releases use `vX.Y.Z` tags and GitHub Releases. Internal `npm-v*` tags only trigger Verdaccio publication and are not public repository releases.
+- Public releases use `vX.Y.Z` tags and GitHub Releases. Internal `npm-v*` tags trigger Verdaccio publication and may be mirrored as ordinary Git refs, but they do not create GitHub Releases and are not public project versions.
 - Do not commit machine names, credentials, tokens, model weights, private media, or local deployment configuration. Machine-specific instructions belong in ignored `AGENTS.md.local`.
 
 ## TypeScript packages and publication

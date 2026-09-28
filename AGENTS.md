@@ -25,10 +25,11 @@
 
 ## Git and hosting
 
-- `origin` is the private Gitea development remote and the only development source of truth. CI and internal issues run there.
-- `github` is a public, read-only mirror. Do not develop or accept divergent commits there; Gitea mirror synchronization may overwrite divergent GitHub refs.
-- Local `main` tracks `origin/main`. Push normal work to `origin`; GitHub synchronization is performed only by the mirror automation after Linux and Windows GPU CI pass for the same SHA.
-- Use a Gitea server-side push mirror with `sync_on_commit` disabled. The CI gate requests a mirror sync only after both suites pass; GitHub credentials must remain in Gitea and must not be exposed to runners.
+- `origin` is the private Gitea promotion and deployment authority. Internal development, trusted Linux/GPU validation, deployment, and issues run there.
+- `github` is the public contribution intake. External pull requests run secret-free hosted Linux CI, then a maintainer explicitly imports the exact head commit into a Gitea pull request; never merge a GitHub pull request directly.
+- Gitea pull requests require Linux unit, Windows GPU smoke, and code-owner approval. A merged `main` is deployed to the Windows node only after both suites pass for the same SHA.
+- GitHub `main` is fast-forwarded from Gitea only after Gitea unit, GPU smoke, and deployment all succeed. Divergence is an error; synchronization must never force-push `main`.
+- Local `main` tracks `origin/main`. Normal internal work goes through a Gitea pull request; do not push directly to either protected `main`.
 - Public releases use `vX.Y.Z` tags and GitHub Releases. Internal `npm-v*` tags trigger Verdaccio publication and may be mirrored as ordinary Git refs, but they do not create GitHub Releases and are not public project versions.
 - Do not commit machine names, credentials, tokens, model weights, private media, or local deployment configuration. Machine-specific instructions belong in ignored `AGENTS.md.local`.
 

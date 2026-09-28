@@ -41,6 +41,8 @@ async def serve(cfg_path: str | None) -> None:
         else:
             await asyncio.Event().wait()
     finally:
+        # 先发布关停状态；Windows 停止进程树时即使引擎子进程先退，也不能误报 engine_failed。
+        node.begin_shutdown()
         for l in ws_links:
             await l.close()
         await link.close()

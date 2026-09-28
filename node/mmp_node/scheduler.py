@@ -44,19 +44,36 @@ class Scheduler:
         self._wake = asyncio.Event()
         self._loop_task: asyncio.Task | None = None
         self._durations: dict[tuple[str, str], float] = {}  # 移动平均，供 eta
+        self._stopping = False
 
     # ---- 生命周期 ----
     def start(self) -> None:
         if self._loop_task is None:
             self._loop_task = asyncio.create_task(self._loop(), name="mmp-scheduler")
 
+    def begin_shutdown(self) -> None:
+        """立刻把未完成任务标成节点下线，避免引擎子进程先退出时误报 engine_failed。"""
+        if self._stopping:
+            return
+        self._stopping = True
+        offline = ApiError("node_offline", "node is shutting down")
+        for job in list(self._queued.values()):
+            self.media.unpin(job.media_id)
+            job.finish("failed", offline)
+        self._queued.clear()
+        self._heap.clear()
+        for job in list(self._running.values()):
+            if job.task:
+                job.task.cancel()
+        self._wake.set()
+
     async def stop(self) -> None:
-        if self._loop_task:
-            self._loop_task.cancel()
-            self._loop_task = None
+        self.begin_shutdown()
+        loop_task, self._loop_task = self._loop_task, None
+        if loop_task:
+            loop_task.cancel()
+            await asyncio.gather(loop_task, return_exceptions=True)
         tasks = [j.task for j in list(self._running.values()) if j.task]
-        for t in tasks:
-            t.cancel()
         # 等任务真正收尾（它们的 except/finally 还会跟引擎进程说话），再让 EnginePool 关进程
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -71,6 +88,8 @@ class Scheduler:
         return len(self._running)
 
     def check_backpressure(self) -> None:
+        if self._stopping:
+            raise ApiError("node_offline", "node is shutting down")
         if self.queue_len >= self.cfg.queue.max_len:
             raise ApiError("backpressure", f"queue full ({self.queue_len})", retry_after_sec=self.cfg.queue.retry_after_sec)
 
@@ -193,11 +212,15 @@ class Scheduler:
             self._durations[(job.tier["engine"], job.tier["tier"])] = (
                 0.7 * self._durations.get((job.tier["engine"], job.tier["tier"]), (time.monotonic() - t0)) + 0.3 * (time.monotonic() - t0))
         except (asyncio.CancelledError, EngineCancelled):
-            job.finish("cancelled")
+            if self._stopping:
+                job.finish("failed", ApiError("node_offline", "node is shutting down"))
+            else:
+                job.finish("cancelled")
         except ApiError as e:
             job.finish("failed", e)
         except EngineCrashed as e:
-            job.finish("failed", ApiError("engine_failed", str(e)))
+            code = "node_offline" if self._stopping else "engine_failed"
+            job.finish("failed", ApiError(code, str(e)))
         except Exception as e:  # 不让任何异常把调度器带走
             log.exception("job %s crashed in scheduler", job.job_id)
             job.finish("failed", ApiError("engine_failed", f"{type(e).__name__}: {e}"))

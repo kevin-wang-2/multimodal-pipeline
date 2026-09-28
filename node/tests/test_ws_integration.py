@@ -179,6 +179,41 @@ async def test_bad_key_is_fatal_and_not_retried(tmp_path):
         await node.close()
 
 
+async def test_graceful_node_shutdown_returns_node_offline_for_inflight_request(tmp_path):
+    port = free_port()
+    b = BrokerProc(port, tmp_path)
+    cfg = make_config(tmp_path, broker__enabled=False)
+    node = Node(cfg, NODE_DIR)
+    await node.start()
+    link = WsLink(node, endpoint(port))
+    closed = False
+    try:
+        await b.start()
+        link.start()
+        await b.wait_nodes(1)
+        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=30, trust_env=False) as c:
+            pending = asyncio.create_task(c.post("/jobs", json={
+                "type": "echo", "media": inline(blob(100)),
+                "params": {"sleep_ms": 4000, "tag": "shutdown"}, "wait": 60,
+            }))
+            for _ in range(100):
+                if node.sched.running == 1:
+                    break
+                await asyncio.sleep(0.05)
+            assert node.sched.running == 1, "request never reached the engine"
+
+            await node.close()
+            closed = True
+            r = await pending
+            assert r.status_code == 503, r.text
+            assert r.json()["status"] == "failed" and r.json()["error"] == "node_offline", r.text
+    finally:
+        b.stop()
+        await link.close()
+        if not closed:
+            await node.close()
+
+
 async def test_broker_rejects_non_register_first_frame(tmp_path):
     """首帧不是 register → 4003；schema 不合法的 register → 4003。用裸 websockets 直连验证。"""
     import json

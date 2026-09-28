@@ -52,7 +52,11 @@ class Node:
         self.sched.start()
         self._gc_task = asyncio.create_task(self._gc_loop(), name="mmp-job-gc")
 
+    def begin_shutdown(self) -> None:
+        self.sched.begin_shutdown()
+
     async def close(self) -> None:
+        self.begin_shutdown()
         if self._gc_task:
             self._gc_task.cancel()
         await self.sched.stop()

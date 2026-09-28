@@ -149,5 +149,5 @@ jobs:
           git -c http.extraHeader="Authorization: token %TOKEN%" fetch -q --depth 1 origin %GITHUB_SHA%
           git checkout -q -f FETCH_HEAD
       - name: Deploy exact main SHA to mmp-node
-        shell: powershell
-        run: .\tools\deploy\windows-node.ps1 -ExpectedSha '${{ github.sha }}'
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\tools\deploy\windows-node.ps1 -ExpectedSha "${{ github.sha }}"

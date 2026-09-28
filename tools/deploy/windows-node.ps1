@@ -1,7 +1,14 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-f]{40}$')]
-    [string]$ExpectedSha
+    [string]$ExpectedSha,
+
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^https://')]
+    [string]$RepositoryUrl,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Token
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +22,12 @@ function Invoke-Git {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
     & git @GitPrefix @Arguments
     if ($LASTEXITCODE -ne 0) { throw "git $Arguments failed with exit code $LASTEXITCODE" }
+}
+
+function Invoke-AuthenticatedGit {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    & git @GitPrefix -c "http.extraHeader=Authorization: token $Token" @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "authenticated git operation failed with exit code $LASTEXITCODE" }
 }
 
 function Install-Node {
@@ -49,7 +62,7 @@ if (-not (Test-Path "$Repo\.git")) { throw "$Repo is not a git checkout" }
 if ((Invoke-Git status --porcelain).Count -ne 0) { throw "$Repo has local changes; refusing deployment" }
 
 $PreviousSha = (Invoke-Git rev-parse HEAD | Select-Object -Last 1).Trim()
-Invoke-Git fetch --quiet origin main
+Invoke-AuthenticatedGit fetch --quiet $RepositoryUrl 'main:refs/remotes/origin/main'
 $RemoteSha = (Invoke-Git rev-parse origin/main | Select-Object -Last 1).Trim()
 if ($RemoteSha -ne $ExpectedSha) { throw "origin/main is $RemoteSha, expected $ExpectedSha" }
 Invoke-Git merge-base --is-ancestor $PreviousSha $ExpectedSha

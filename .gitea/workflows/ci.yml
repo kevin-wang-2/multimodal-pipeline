@@ -150,4 +150,6 @@ jobs:
           git checkout -q -f FETCH_HEAD
       - name: Deploy exact main SHA to mmp-node
         shell: cmd
-        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\tools\deploy\windows-node.ps1 -ExpectedSha "${{ github.sha }}"
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\tools\deploy\windows-node.ps1 -ExpectedSha "${{ github.sha }}" -RepositoryUrl "%GITHUB_SERVER_URL%/%GITHUB_REPOSITORY%.git" -Token "%TOKEN%"

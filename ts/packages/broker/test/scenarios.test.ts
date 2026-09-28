@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Broker, RegisterRejected } from "../src/core.js";
-import type { RequestPayload, ResponsePayload } from "@mmp/protocol";
+import { ApiError, type RequestPayload, type ResponsePayload } from "@mmp/protocol";
 
 const DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../protocol/fixtures/broker-scenarios");
 
@@ -37,6 +37,30 @@ class FakeNode {
     return { req_id: payload.req_id, http_status: rep.http_status, body } as ResponsePayload;
   };
 }
+
+test("request timeout aborts transport pending without dropping the node", async () => {
+  const broker = new Broker({ nodeKey: "scenario-node-key-0123456789", inflightGraceSec: 0.01 });
+  let aborted = false;
+  const send = (_payload: RequestPayload, signal?: AbortSignal): Promise<ResponsePayload> => new Promise((_resolve, reject) => {
+    signal?.addEventListener("abort", () => {
+      aborted = true;
+      reject(new ApiError("timeout", "aborted"));
+    }, { once: true });
+  });
+  broker.onRegister({
+    type: "register", protocol_version: "1.1", ts: "2026-09-21T00:00:00Z",
+    payload: { node_id: "node-a", node_key: "scenario-node-key-0123456789", capabilities: [{
+      id: "echo", modal: "audio", tiers: [{ tier: "cpu", engine: "e-echo", engine_version: "1", cost: "low" }],
+      input: { media: "required" }, output_schema: { type: "object" },
+    }], engine_versions: { "e-echo": "1" } },
+  }, send);
+
+  const reply = await broker.submit({ type: "echo", media: { ref: "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1" } });
+  assert.equal(reply.status, 504);
+  assert.equal(reply.body.error, "timeout");
+  assert.equal(aborted, true);
+  assert.equal(broker.health().body.status, "ok");
+});
 
 for (const file of readdirSync(DIR).filter((f) => f.endsWith(".json")).sort()) {
   test(file.replace(/\.json$/, ""), async () => {

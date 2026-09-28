@@ -5,7 +5,7 @@
  */
 import { ApiError, type Capability, type HeartbeatPayload, type JobRequest, type RequestPayload, type ResponsePayload } from "@mmp/protocol";
 
-export type SendFn = (payload: RequestPayload) => Promise<ResponsePayload>;
+export type SendFn = (payload: RequestPayload, signal?: AbortSignal) => Promise<ResponsePayload>;
 export type Reply = { status: number; body: Record<string, unknown> };
 
 export class RegisterRejected extends Error {
@@ -92,7 +92,7 @@ export class Broker {
     this.nodes.delete(nodeId);
   }
 
-  /** Broker 主动丢弃节点（在途超时 / 心跳超时）时通知传输层关连接。 */
+  /** Broker 因心跳超时主动丢弃节点时通知传输层关连接。 */
   onDropped(fn: (nodeId: string, link: NodeLink) => void): void {
     this.dropHandlers.push(fn);
   }
@@ -131,17 +131,17 @@ export class Broker {
   private async call(link: NodeLink, payload: Omit<RequestPayload, "req_id">, waitSec: number): Promise<Reply> {
     const req = { req_id: `b${++this.reqSeq}`, ...payload } as RequestPayload;
     const timeoutMs = (waitSec + this.inflightGraceSec) * 1000;
+    const controller = new AbortController();
     let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new ApiError("node_offline", `node ${link.nodeId} did not respond in time`)), timeoutMs); });
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new ApiError("timeout", `node ${link.nodeId} did not respond before broker deadline`));
+        controller.abort();
+      }, timeoutMs);
+    });
     try {
-      const resp = await Promise.race([link.send(req), timeout]);
+      const resp = await Promise.race([link.send(req, controller.signal), timeout]);
       return { status: resp.http_status, body: resp.body as Record<string, unknown> };
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "node_offline") {
-        this.log(`node ${link.nodeId} did not answer ${payload.op} within ${timeoutMs}ms, dropping link`);
-        if (this.nodes.get(link.nodeId) === link) this.drop(link.nodeId, link);
-      }
-      throw e;
     } finally {
       clearTimeout(timer);
     }

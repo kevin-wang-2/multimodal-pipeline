@@ -28,11 +28,27 @@ export function attachWs(broker: Broker, wss: WebSocketServer, opts: WsOptions =
       if (!link) { log(`${peer}: no register within ${opts.registerTimeoutSec ?? 10}s, closing`); ws.close(4003, "register timeout"); }
     }, (opts.registerTimeoutSec ?? 10) * 1000);
 
-    const send: SendFn = (payload: RequestPayload) => new Promise((resolve, reject) => {
+    const send: SendFn = (payload: RequestPayload, signal?: AbortSignal) => new Promise((resolve, reject) => {
       if (ws.readyState !== WebSocket.OPEN) return reject(new ApiError("node_offline", "node connection is not open"));
-      pending.set(payload.req_id, { resolve, reject });
+      const cleanup = () => signal?.removeEventListener("abort", onAbort);
+      const onAbort = () => {
+        const p = pending.get(payload.req_id);
+        if (!p) return;
+        pending.delete(payload.req_id);
+        p.reject(new ApiError("timeout", `request ${payload.req_id} timed out`));
+      };
+      if (signal?.aborted) return reject(new ApiError("timeout", `request ${payload.req_id} timed out`));
+      pending.set(payload.req_id, {
+        resolve: (response) => { cleanup(); resolve(response); },
+        reject: (error) => { cleanup(); reject(error); },
+      });
+      signal?.addEventListener("abort", onAbort, { once: true });
       ws.send(JSON.stringify(envelope(broker, "request", payload)), (err) => {
-        if (err) { pending.delete(payload.req_id); reject(new ApiError("node_offline", `send failed: ${err.message}`)); }
+        if (err) {
+          const p = pending.get(payload.req_id);
+          pending.delete(payload.req_id);
+          p?.reject(new ApiError("node_offline", `send failed: ${err.message}`));
+        }
       });
     });
 
@@ -76,9 +92,9 @@ export function attachWs(broker: Broker, wss: WebSocketServer, opts: WsOptions =
     ws.on("close", (code, reason) => teardown(`close ${code} ${reason.toString()}`));
     ws.on("error", (e) => teardown(`error ${e.message}`));
 
-    // Broker 因在途超时把节点丢掉时，连接视为不健康，关掉让 A 重连
+    // 节点健康只由心跳决定；单个请求超时不会走这里，也不会关闭连接。
     broker.onDropped((nodeId, dropped) => {
-      if (dropped === link && ws.readyState === WebSocket.OPEN) ws.close(1011, "unresponsive");
+      if (dropped === link && ws.readyState === WebSocket.OPEN) ws.close(1011, "missed heartbeats");
     });
   });
 }

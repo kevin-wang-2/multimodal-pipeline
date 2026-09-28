@@ -1,5 +1,5 @@
 {
-  "description": "A 在 wait + grace 内不响应 → 503 node_offline，且该连接被视为不健康丢弃",
+  "description": "A 在 wait + grace 内不响应 → 当前请求 504 timeout；节点健康仍只由心跳决定",
   "broker": {
     "node_key": "scenario-node-key-0123456789",
     "inflight_grace_sec": 0.3
@@ -72,9 +72,9 @@
         "wait": 0
       },
       "expect": {
-        "http_status": 503,
+        "http_status": 504,
         "body": {
-          "error": "node_offline"
+          "error": "timeout"
         }
       },
       "expect_routed_to": "node-a"
@@ -84,7 +84,12 @@
       "expect": {
         "http_status": 200,
         "body": {
-          "status": "no_node"
+          "status": "ok",
+          "nodes": [
+            {
+              "node_id": "node-a"
+            }
+          ]
         }
       }
     }

@@ -119,9 +119,9 @@ class Broker:
         try:
             resp = await asyncio.wait_for(link.send(payload), wait + self.inflight_grace_sec)
         except asyncio.TimeoutError:
-            log.warning("node %s did not answer %s within %.1fs, dropping link", link.node_id, payload["op"], wait + self.inflight_grace_sec)
-            self.on_disconnect(link.node_id)
-            raise ApiError("node_offline", f"node {link.node_id} did not respond in time")
+            log.warning("node %s did not answer %s within %.1fs; request timed out but link stays healthy",
+                        link.node_id, payload["op"], wait + self.inflight_grace_sec)
+            raise ApiError("timeout", f"node {link.node_id} did not respond before broker deadline")
         return resp["http_status"], resp["body"]
 
     # ---- 五个操作 ----

@@ -1,0 +1,47 @@
+name: sync-from-gitea
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-from-gitea-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: [self-hosted, linux, x64, mmp-sync]
+    timeout-minutes: 10
+    env:
+      GITEA_TOKEN: ${{ secrets.GITEA_MIRROR_TOKEN }}
+      GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+      GITEA_BASE_URL: http://100.64.0.6:3000
+    steps:
+      - name: Fast-forward GitHub after Gitea CI and deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GITEA_TOKEN"
+          test -n "$GH_MIRROR_TOKEN"
+          api="$GITEA_BASE_URL/api/v1/repos/kaibinwa/multimodal-pipeline"
+          sha="$(curl -fsS -H "Authorization: token $GITEA_TOKEN" "$api/branches/main" | jq -r .commit.id)"
+          statuses="$(curl -fsS -H "Authorization: token $GITEA_TOKEN" "$api/commits/$sha/statuses")"
+          for context in 'ci / unit (push)' 'ci / smoke (push)' 'ci / deploy-node (push)'; do
+            state="$(jq -r --arg context "$context" '[.[] | select(.context == $context)][0].status // "missing"' <<<"$statuses")"
+            test "$state" = success || { echo "$context is $state for $sha"; exit 1; }
+          done
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          git -C "$work" init -q
+          git -C "$work" remote add gitea "http://oauth2:$GITEA_TOKEN@100.64.0.6:3000/kaibinwa/multimodal-pipeline.git"
+          git -C "$work" remote add github "https://x-access-token:$GH_MIRROR_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          git -C "$work" fetch -q gitea main
+          git -C "$work" fetch -q github main
+          test "$(git -C "$work" rev-parse refs/remotes/gitea/main)" = "$sha"
+          if test "$(git -C "$work" rev-parse refs/remotes/github/main)" = "$sha"; then exit 0; fi
+          git -C "$work" merge-base --is-ancestor refs/remotes/github/main refs/remotes/gitea/main
+          git -C "$work" push github "$sha:refs/heads/main"

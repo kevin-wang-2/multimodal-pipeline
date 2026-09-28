@@ -1,4 +1,5 @@
-# unit：任意 linux runner。协议契约测试（py + ts）+ A / B-py 验收测试（echo 引擎，无模型）。
+# 合并门禁：Linux 契约/单测 + Windows GPU 真模型冒烟。
+# main push 两项成功后，同一台 Windows runner 才部署 C:\mmp\repo 并健康检查。
 #
 # 本实例的 runner 访问不到 github.com，不用 actions/*；检出按本实例惯例手工 git fetch。
 # runner 镜像 docker.gitea.com/runner-images:ubuntu-latest 自带 Python 3.12、Node 24、git。
@@ -66,3 +67,87 @@ jobs:
       - name: Node acceptance (A + B-py echo, B-py scenarios, A ws client vs real B-ts)
         run: ../.venv/bin/python -m pytest -q
         working-directory: node
+
+  smoke:
+    runs-on: windows
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
+      PY_NODE: C:\ProgramData\miniconda3\envs\mmp-node\python.exe
+      MMP_ENGINE_PYTHON: C:\ProgramData\miniconda3\envs\mmp-audio\python.exe
+      MMP_MODELS_DIR: C:\mmp\models
+      MMP_SMOKE_WAVS: C:\mmp\testdata
+      MMP_OCR_PYTHON: C:\ProgramData\miniconda3\envs\ocrlab\python.exe
+      MMP_OCR_INVOICES: C:\mmp\invoices
+      PADDLE_PDX_CACHE_HOME: C:\mmp\paddlex
+      PADDLE_PDX_MODEL_SOURCE: modelscope
+    steps:
+      - name: Checkout
+        shell: cmd
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          @echo off
+          git init -q .
+          git remote remove origin 2>nul
+          git remote add origin %GITHUB_SERVER_URL%/%GITHUB_REPOSITORY%.git
+          git -c http.extraHeader="Authorization: token %TOKEN%" fetch -q --depth 1 origin %GITHUB_SHA%
+          git checkout -q -f FETCH_HEAD
+      - name: GPU visible
+        shell: cmd
+        run: nvidia-smi
+      - name: Install node package into mmp-node env
+        shell: cmd
+        run: |
+          @echo off
+          %PY_NODE% --version
+          %PY_NODE% -m pip install -q -e "node[dev]" || exit /b 1
+          %MMP_ENGINE_PYTHON% -c "import sherpa_onnx, onnxruntime; print('engine env ok', sherpa_onnx.__version__)" || exit /b 1
+      - name: Build ts workspace (B-ts for the ws integration test)
+        shell: cmd
+        working-directory: ts
+        run: |
+          @echo off
+          node --version
+          call pnpm --version
+          call pnpm install --frozen-lockfile || exit /b 1
+          call pnpm -r build || exit /b 1
+          dir packages\broker\dist\cli.js || exit /b 1
+      - name: Node acceptance on Windows (echo + triage.audio real model + ws vs B-ts)
+        shell: cmd
+        working-directory: node
+        run: '%PY_NODE% -m pytest -q -p no:cacheprovider'
+      - name: Real-model smoke on M0 clips
+        shell: cmd
+        run: |
+          @echo off
+          if not exist ci-out mkdir ci-out
+          set MMP_SMOKE_DUMP=ci-out
+          %PY_NODE% node\tools\smoke_triage_audio.py || exit /b 1
+      - name: ocr.structured smoke
+        shell: cmd
+        run: |
+          @echo off
+          %MMP_OCR_PYTHON% node\engines\ocr_structured\setup_env.py verify --env ocrlab || exit /b 1
+          %PY_NODE% node\tools\smoke_ocr_structured.py || exit /b 1
+
+  deploy-node:
+    needs: [unit, smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows
+    timeout-minutes: 15
+    steps:
+      - name: Checkout deployment script
+        shell: cmd
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          @echo off
+          git init -q .
+          git remote remove origin 2>nul
+          git remote add origin %GITHUB_SERVER_URL%/%GITHUB_REPOSITORY%.git
+          git -c http.extraHeader="Authorization: token %TOKEN%" fetch -q --depth 1 origin %GITHUB_SHA%
+          git checkout -q -f FETCH_HEAD
+      - name: Deploy exact main SHA to mmp-node
+        shell: powershell
+        run: .\tools\deploy\windows-node.ps1 -ExpectedSha '${{ github.sha }}'

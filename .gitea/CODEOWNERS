@@ -1,0 +1,9 @@
+# Gitea uses Go regular expressions and the internal account name.
+.* @kaibinwa
+
+protocol/.* @kaibinwa
+node/.* @kaibinwa
+ts/packages/.* @kaibinwa
+\.gitea/.* @kaibinwa
+\.github/.* @kaibinwa
+tools/deploy/.* @kaibinwa

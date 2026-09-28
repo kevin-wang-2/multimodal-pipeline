@@ -1,0 +1,58 @@
+name: import-to-gitea
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: GitHub pull request number to promote into Gitea
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  import:
+    runs-on: [self-hosted, linux, x64, mmp-sync]
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITEA_TOKEN: ${{ secrets.GITEA_MIRROR_TOKEN }}
+      GITEA_BASE_URL: http://100.64.0.6:3000
+    steps:
+      - name: Import exact PR head without executing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GITEA_TOKEN"
+          pr='${{ inputs.pr_number }}'
+          github_api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          meta="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$github_api/pulls/$pr")"
+          test "$(jq -r .base.ref <<<"$meta")" = main
+          test "$(jq -r .state <<<"$meta")" = open
+          sha="$(jq -r .head.sha <<<"$meta")"
+          title="$(jq -r .title <<<"$meta")"
+          branch="github/pr-$pr"
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          git -C "$work" init -q
+          git -C "$work" fetch -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "pull/$pr/head"
+          test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$sha"
+          remote="http://oauth2:$GITEA_TOKEN@100.64.0.6:3000/kaibinwa/multimodal-pipeline.git"
+          previous="$(git ls-remote "$remote" "refs/heads/$branch" | cut -f1)"
+          git -C "$work" push --force-with-lease="refs/heads/$branch:$previous" "$remote" "$sha:refs/heads/$branch"
+          existing="$(curl -fsS -H "Authorization: token $GITEA_TOKEN" \
+            "$GITEA_BASE_URL/api/v1/repos/kaibinwa/multimodal-pipeline/pulls?state=open&head=kaibinwa:$branch")"
+          gitea_pr="$(jq -r '.[0].number // empty' <<<"$existing")"
+          if test -z "$gitea_pr"; then
+            body="$(jq -n --arg head "$branch" --arg title "[GitHub #$pr] $title" \
+              --arg body "Promoted from https://github.com/$GITHUB_REPOSITORY/pull/$pr. Keep the GitHub head commit intact when merging." \
+              '{head:$head,base:"main",title:$title,body:$body}')"
+            created="$(curl -fsS -X POST -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
+              -d "$body" "$GITEA_BASE_URL/api/v1/repos/kaibinwa/multimodal-pipeline/pulls")"
+            gitea_pr="$(jq -r .number <<<"$created")"
+          fi
+          comment="$(jq -n --arg body "Promoted to Gitea PR #$gitea_pr for trusted Linux + GPU validation. Do not merge this GitHub PR directly." '{body:$body}')"
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+            -H 'Content-Type: application/json' -d "$comment" "$github_api/issues/$pr/comments" >/dev/null

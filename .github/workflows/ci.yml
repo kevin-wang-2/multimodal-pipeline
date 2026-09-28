@@ -1,0 +1,53 @@
+name: github-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PIP_DEFAULT_TIMEOUT: "120"
+      PIP_RETRIES: "5"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.13.1"
+      - name: Install Python dependencies
+        run: python -m pip install -q -e "node[dev]" -r protocol/tests/py/requirements.txt
+      - name: Contract tests (Python)
+        run: python -m pytest -q
+        working-directory: protocol/tests/py
+      - name: Contract tests (TypeScript)
+        run: pnpm install --frozen-lockfile && pnpm test
+        working-directory: protocol/tests/ts
+      - name: TypeScript workspace
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -r build
+          pnpm gen-types
+          git diff --exit-code -- packages/protocol/src/types.ts
+          pnpm -r test
+          pnpm release:pack
+        working-directory: ts
+      - name: Node acceptance
+        run: python -m pytest -q
+        working-directory: node

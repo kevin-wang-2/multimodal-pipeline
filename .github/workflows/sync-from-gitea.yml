@@ -18,15 +18,14 @@ jobs:
     timeout-minutes: 10
     env:
       GITEA_TOKEN: ${{ secrets.GITEA_MIRROR_TOKEN }}
-      GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
       GITEA_BASE_URL: http://100.64.0.6:3000
+      GIT_SSH_COMMAND: ssh -i /home/kaibinwa/.ssh/mmp_github_mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/kaibinwa/.ssh/known_hosts
     steps:
       - name: Fast-forward GitHub after Gitea CI and deployment
         shell: bash
         run: |
           set -euo pipefail
           test -n "$GITEA_TOKEN"
-          test -n "$GH_MIRROR_TOKEN"
           api="$GITEA_BASE_URL/api/v1/repos/kaibinwa/multimodal-pipeline"
           sha="$(curl -fsS -H "Authorization: token $GITEA_TOKEN" "$api/branches/main" | jq -r .commit.id)"
           statuses="$(curl -fsS -H "Authorization: token $GITEA_TOKEN" "$api/commits/$sha/statuses")"
@@ -38,7 +37,7 @@ jobs:
           trap 'rm -rf "$work"' EXIT
           git -C "$work" init -q
           git -C "$work" remote add gitea "http://oauth2:$GITEA_TOKEN@100.64.0.6:3000/kaibinwa/multimodal-pipeline.git"
-          git -C "$work" remote add github "https://x-access-token:$GH_MIRROR_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          git -C "$work" remote add github "ssh://git@ssh.github.com:443/$GITHUB_REPOSITORY.git"
           git -C "$work" fetch -q gitea main
           git -C "$work" fetch -q github main
           test "$(git -C "$work" rev-parse refs/remotes/gitea/main)" = "$sha"

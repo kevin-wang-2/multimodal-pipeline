@@ -1,0 +1,11 @@
+{
+  "type": "result",
+  "id": "gpu-node-01ARZ3NDEKTSV4RRFFQ69G5FAV#1",
+  "retry": {
+    "engine": "triage_image_large",
+    "reason": "empty_description"
+  },
+  "timings_ms": {
+    "caption": 412
+  }
+}

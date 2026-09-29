@@ -136,6 +136,32 @@ export type EngineIo = {
   type: "hello" | "run" | "cancel" | "shutdown" | "result" | "error" | "log";
   [k: string]: unknown;
 } & (Hello | Run | Cancel | Shutdown | Result | Error | Log);
+/**
+ * 引擎→A。result 是该任务类型 output_schema 的实例（digest 由引擎组装，A 只补 source）。
+ */
+export type Result = {
+  type: "result";
+  id: string;
+  result?: unknown;
+  /**
+   * 引擎请求 A 在释放当前阶段资源后执行一次内部质量兜底；不是对外任务升级。
+   */
+  retry?: {
+    engine: string;
+    reason: string;
+  };
+  timings_ms?: {
+    [k: string]: number;
+  };
+  /**
+   * 仅供节点调度与验收观测的内部执行指标，不进入任务结果协议。
+   */
+  metrics?: {
+    [k: string]: number;
+  };
+} & {
+  [k: string]: unknown;
+};
 
 export interface Protocol {
   "ab-message"?: AbMessage;
@@ -752,6 +778,9 @@ export interface Run {
     params: {
       [k: string]: unknown;
     };
+    internal?: {
+      [k: string]: unknown;
+    };
     timeout_sec?: number;
   };
 }
@@ -767,17 +796,6 @@ export interface Cancel {
  */
 export interface Shutdown {
   type: "shutdown";
-}
-/**
- * 引擎→A。result 是该任务类型 output_schema 的实例（digest 由引擎组装，A 只补 source）。
- */
-export interface Result {
-  type: "result";
-  id: string;
-  result: unknown;
-  timings_ms?: {
-    [k: string]: number;
-  };
 }
 export interface Error {
   type: "error";

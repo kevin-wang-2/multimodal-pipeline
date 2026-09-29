@@ -16,7 +16,7 @@ import traceback
 from typing import Awaitable, Callable
 
 PROTOCOL_VERSION = "1.2"
-RunFn = Callable[[dict, asyncio.Event], Awaitable[tuple[object, dict]]]
+RunFn = Callable[[dict, asyncio.Event], Awaitable[tuple]]
 
 # 协议帧只走原始 stdout 的字节流；之后把 sys.stdout 指到 stderr，第三方库的 print 就污染不了 JSON 流
 _PROTO_OUT = sys.stdout.buffer
@@ -70,11 +70,21 @@ async def _serve(engine: str, engine_version: str, run: RunFn) -> None:
 
     async def handle(rid: str, job: dict, cancelled: asyncio.Event) -> None:
         try:
-            result, timings = await run(job, cancelled)
+            outcome = await run(job, cancelled)
+            result, timings = outcome[:2]
+            retry = outcome[2] if len(outcome) > 2 else None
+            metrics = outcome[3] if len(outcome) > 3 else None
             if cancelled.is_set():
                 _emit({"type": "error", "id": rid, "error": "cancelled"})
             else:
-                _emit({"type": "result", "id": rid, "result": result, "timings_ms": timings})
+                msg = {"type": "result", "id": rid, "timings_ms": timings}
+                if retry is None:
+                    msg["result"] = result
+                else:
+                    msg["retry"] = retry
+                if metrics:
+                    msg["metrics"] = metrics
+                _emit(msg)
         except asyncio.CancelledError:
             _emit({"type": "error", "id": rid, "error": "cancelled"})
         except BadParams as e:

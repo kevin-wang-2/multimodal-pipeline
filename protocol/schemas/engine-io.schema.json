@@ -46,6 +46,7 @@
             "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
             "media_path": { "description": "本机文件路径；input.media=none 的类型省略。", "type": "string", "minLength": 1 },
             "params": { "type": "object" },
+            "internal": { "type": "object" },
             "timeout_sec": { "type": "number", "exclusiveMinimum": 0 }
           },
           "required": ["job_id", "task_type", "tier", "media_id", "params"],
@@ -76,9 +77,28 @@
         "type": { "const": "result" },
         "id": { "$ref": "#/$defs/ReqId" },
         "result": {},
-        "timings_ms": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+        "retry": {
+          "description": "引擎请求 A 在释放当前阶段资源后执行一次内部质量兜底；不是对外任务升级。",
+          "type": "object",
+          "properties": {
+            "engine": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+            "reason": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+          },
+          "required": ["engine", "reason"],
+          "additionalProperties": false
+        },
+        "timings_ms": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "metrics": {
+          "description": "仅供节点调度与验收观测的内部执行指标，不进入任务结果协议。",
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        }
       },
-      "required": ["type", "id", "result"],
+      "required": ["type", "id"],
+      "oneOf": [
+        { "required": ["result"], "not": { "required": ["retry"] } },
+        { "required": ["retry"], "not": { "required": ["result"] } }
+      ],
       "additionalProperties": false
     },
     "Error": {

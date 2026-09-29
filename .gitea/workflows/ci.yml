@@ -79,6 +79,11 @@ jobs:
       MMP_SMOKE_WAVS: C:\mmp\testdata
       MMP_OCR_PYTHON: C:\ProgramData\miniconda3\envs\ocrlab\python.exe
       MMP_OCR_INVOICES: C:\mmp\invoices
+      MMP_IMAGE_PYTHON: C:\mmp\envs\vision-spike-venv\Scripts\python.exe
+      MMP_FLORENCE_BASE: C:\mmp\cache\vision-spike\models\Florence-2-base-ft-native
+      MMP_FLORENCE_LARGE: C:\mmp\cache\vision-spike\models\Florence-2-large-ft-native
+      MMP_SMOKE_IMAGES: C:\mmp\testdata\images
+      MMP_SMOKE_DOCUMENT: C:\mmp\invoices\20260105_202507_12_2396_\p-001.png
       PADDLE_PDX_CACHE_HOME: C:\mmp\paddlex
       PADDLE_PDX_MODEL_SOURCE: modelscope
     steps:
@@ -103,6 +108,7 @@ jobs:
           %PY_NODE% --version
           %PY_NODE% -m pip install -q -e "node[dev]" || exit /b 1
           %MMP_ENGINE_PYTHON% -c "import sherpa_onnx, onnxruntime; print('engine env ok', sherpa_onnx.__version__)" || exit /b 1
+          %MMP_IMAGE_PYTHON% -c "import torch, transformers, PIL; print('image env ok', torch.__version__, transformers.__version__)" || exit /b 1
       - name: Build ts workspace (B-ts for the ws integration test)
         shell: cmd
         working-directory: ts
@@ -124,6 +130,9 @@ jobs:
           if not exist ci-out mkdir ci-out
           set MMP_SMOKE_DUMP=ci-out
           %PY_NODE% node\tools\smoke_triage_audio.py || exit /b 1
+      - name: triage.image real-model smoke
+        shell: cmd
+        run: '%PY_NODE% node\tools\smoke_triage_image.py || exit /b 1'
       - name: ocr.structured smoke
         shell: cmd
         run: |

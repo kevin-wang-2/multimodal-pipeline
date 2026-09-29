@@ -33,6 +33,7 @@ class Job:
     result: object = None
     result_ref: dict | None = None
     timings_ms: dict = field(default_factory=dict)
+    engine_metrics: dict = field(default_factory=dict)  # A 内部观测，不进入 B/C 响应
     error: ApiError | None = None
     cancel_requested: bool = False
     done: asyncio.Event = field(default_factory=asyncio.Event)

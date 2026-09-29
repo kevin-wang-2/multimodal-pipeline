@@ -27,7 +27,7 @@
 
 - `origin` is the private Gitea promotion and deployment authority. Internal development, trusted Linux/GPU validation, deployment, and issues run there.
 - `github` is the public contribution intake. External pull requests run secret-free hosted Linux CI, then a maintainer explicitly imports the exact head commit into a Gitea pull request; never merge a GitHub pull request directly.
-- Gitea pull requests require Linux unit, Windows GPU smoke, and code-owner approval. A merged `main` is deployed to the Windows node only after both suites pass for the same SHA.
+- Gitea pull requests require Linux unit, Windows GPU smoke, and code-owner approval. A merged `main` is deployed as the same exact SHA to the Windows node and the standalone B-ts broker only after both suites pass; either deployment must health-check and roll back independently.
 - GitHub `main` is fast-forwarded from Gitea only after Gitea unit, GPU smoke, and deployment all succeed. Divergence is an error; synchronization must never force-push `main`.
 - Local `main` tracks `origin/main`. Normal internal work goes through a Gitea pull request; do not push directly to either protected `main`.
 - Public releases use `vX.Y.Z` tags and GitHub Releases. Internal `npm-v*` tags trigger Verdaccio publication and may be mirrored as ordinary Git refs, but they do not create GitHub Releases and are not public project versions.

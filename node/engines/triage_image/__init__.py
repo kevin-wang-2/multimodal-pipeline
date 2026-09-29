@@ -11,7 +11,6 @@ PARAMS_SCHEMA = {
     "type": "object",
     "properties": {
         "region_dedupe_iou": {"type": "number", "minimum": 0.5, "maximum": 1, "default": 0.8},
-        "pdf_dpi": {"type": "integer", "minimum": 72, "maximum": 300, "default": 144},
     },
     "additionalProperties": False,
 }
@@ -24,7 +23,7 @@ CAPABILITIES = [{
         "tier": "gpu-fast", "engine": ENGINE, "engine_version": ENGINE_VERSION, "cost": "low",
         "latency_hint": "~0.4-0.8s/surface warm", "vram_mb": 768, "max_concurrency": 1,
     }],
-    "input": {"media": {"presence": "required", "accepts": ["image/*", "application/pdf"]},
+    "input": {"media": {"presence": "required", "accepts": ["image/*"]},
               "params_schema": PARAMS_SCHEMA},
     "output": {"schema": "urn:mmp:protocol:2:digest", "agent_context": "required"},
 }]

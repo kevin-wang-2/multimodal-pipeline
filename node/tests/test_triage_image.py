@@ -5,6 +5,8 @@ import base64
 import io
 import sys
 
+import pytest
+
 from mmp_node.engine_io import EngineResult
 from mmp_node.schemas import DIGEST_ID
 
@@ -15,6 +17,7 @@ from engines.triage_image import CAPABILITIES  # noqa: E402
 from engines.triage_image.digest import RawRegion, build_digest  # noqa: E402
 from engines.triage_image.presentation import render_agent_context  # noqa: E402
 from engines.triage_image.runner import _surfaces  # noqa: E402
+from engines.ocr_structured.pages import UnsupportedDocument  # noqa: E402
 
 V_DIGEST = validator(DIGEST_ID)
 MID = "sha256:" + "1" * 64
@@ -57,7 +60,8 @@ def test_capability_only_exposes_base_tier():
     assert CAPABILITIES[0]["id"] == "triage.image"
     assert [t["tier"] for t in CAPABILITIES[0]["tiers"]] == ["gpu-fast"]
     assert CAPABILITIES[0]["purpose"] == "triage"
-    assert CAPABILITIES[0]["input"]["media"]["accepts"] == ["image/*", "application/pdf"]
+    assert CAPABILITIES[0]["input"]["media"]["accepts"] == ["image/*"]
+    assert "pdf_dpi" not in CAPABILITIES[0]["input"]["params_schema"]["properties"]
 
 
 def test_image_agent_context_carries_description_regions_provenance_and_gaps():
@@ -76,10 +80,17 @@ def test_multiframe_tiff_becomes_page_surfaces(tmp_path):
     path = tmp_path / "two-pages.tiff"
     Image.new("RGB", (20, 10), "white").save(path, save_all=True,
                                                append_images=[Image.new("RGB", (30, 15), "black")])
-    kind, items = _surfaces(str(path), 144)
+    kind, items = _surfaces(str(path))
     assert kind == "tiff"
     assert [s["id"] for _, s in items] == ["page_0", "page_1"]
     assert [(s["width_px"], s["height_px"]) for _, s in items] == [(20, 10), (30, 15)]
+
+
+def test_image_engine_rejects_pdf_even_without_content_type(tmp_path):
+    path = tmp_path / "document.pdf"
+    path.write_bytes(b"%PDF-1.7\n")
+    with pytest.raises(UnsupportedDocument, match="triage.image accepts only images"):
+        _surfaces(str(path))
 
 
 async def test_internal_large_stage_records_actual_source_and_cache(tmp_path):
@@ -118,13 +129,14 @@ async def test_internal_large_stage_records_actual_source_and_cache(tmp_path):
     await stack.client.aclose(); await stack.link.close(); await stack.node.close()
 
 
-async def test_image_capability_rejects_declared_audio_content_type(tmp_path):
+@pytest.mark.parametrize("content_type", ["audio/wav", "application/pdf"])
+async def test_image_capability_rejects_non_image_content_type(tmp_path, content_type):
     stack = await build_stack(tmp_path, engines={"triage_image": {"module": "engines.triage_image", "timeout_sec": 5}},
                               scheduler__vram_total_mb=1024)
     try:
         response = await stack.submit(type="triage.image",
                                       media={"inline": base64.b64encode(b"bytes").decode(),
-                                             "content_type": "audio/wav"}, wait=0)
+                                             "content_type": content_type}, wait=0)
         assert response.status_code == 400
         assert "does not accept content_type" in response.json()["message"]
     finally:

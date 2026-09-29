@@ -14,6 +14,7 @@
 - B is a stateless coordination role with Python and TypeScript implementations. Do not move durable job or media state into B.
 - C is the caller-side TypeScript client or host adapter. It must not depend on whether B is bound or remote.
 - `triage.audio` and `triage.image` are automatic task types; explicit capabilities use the same job, media-handle, cache, and registry system.
+- Triage and explicit capabilities have different input boundaries. A triage task is an automatic, information-preserving entry point for one media family; a capability's `accepts` only states what that tool can process. Never infer triage ownership from a capability accepting the same MIME type (for example, PDF support in OCR does not make PDF an image).
 - Preflight emits task-independent atomic facts, explicit gaps, and available capabilities. It does not guess user intent or silently turn generated descriptions into facts.
 
 ## Planning and issues

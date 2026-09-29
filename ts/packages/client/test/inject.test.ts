@@ -26,6 +26,10 @@ test("M0 digest renders deterministically with boundary markers, timeline, gaps,
   assert.ok(!out.includes("⚠"));
 });
 
+test("image digest is not silently rendered as an audio timeline before #25", () => {
+  assert.throws(() => renderDigest(load("image_scene.json")), /image digest rendering is not implemented/);
+});
+
 test("degraded digest gets an explicit warning and failed tools are listed; ASR failure is stated", () => {
   const d = load("speech_segment_asr_failed.json");
   const out = renderDigest(d);

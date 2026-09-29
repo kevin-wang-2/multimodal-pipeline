@@ -49,7 +49,7 @@ def _iso(ts: float) -> str:
 
 
 class Broker:
-    def __init__(self, node_key: str, protocol_version: str = "1.1", inflight_grace_sec: float = 5,
+    def __init__(self, node_key: str, protocol_version: str = "1.2", inflight_grace_sec: float = 5,
                  heartbeat_interval_sec: float = 10, missed_heartbeats: int = 3, now: Callable[[], float] = time.time):
         self.node_key = node_key
         self.protocol_version = protocol_version

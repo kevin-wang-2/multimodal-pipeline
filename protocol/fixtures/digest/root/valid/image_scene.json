@@ -1,0 +1,95 @@
+{
+  "media_id": "sha256:ba12d23103dfc292c9c5158397fe74f302184ee104825e3f3ff6e55d958b9591",
+  "kind": "image",
+  "format": "image/jpeg",
+  "surfaces": [
+    {
+      "id": "image_0",
+      "kind": "image",
+      "index": 0,
+      "width_px": 640,
+      "height_px": 480,
+      "rotation_deg": 0
+    }
+  ],
+  "description": {
+    "text": "一辆浅绿色汽车停在黄色建筑前，建筑有两扇木门。",
+    "provenance": {
+      "kind": "model_inference",
+      "tools": ["visual_caption"]
+    }
+  },
+  "regions": [
+    {
+      "id": "region_car_0",
+      "surface_id": "image_0",
+      "bbox_px": {
+        "x_min": 34,
+        "y_min": 157,
+        "x_max": 583,
+        "y_max": 373
+      },
+      "label": "car",
+      "description": "一辆浅绿色汽车",
+      "provenance": {
+        "kind": "model_inference",
+        "tools": ["phrase_grounding", "object_detection"]
+      }
+    },
+    {
+      "id": "region_door_0",
+      "surface_id": "image_0",
+      "bbox_px": {
+        "x_min": 454,
+        "y_min": 94,
+        "x_max": 581,
+        "y_max": 263
+      },
+      "label": "door",
+      "provenance": {
+        "kind": "model_inference",
+        "tools": ["phrase_grounding"]
+      }
+    }
+  ],
+  "quality_signals": [
+    {
+      "code": "description_nonempty",
+      "status": "ok",
+      "value": true
+    },
+    {
+      "code": "grounding_coverage",
+      "status": "ok",
+      "value": 0.92
+    }
+  ],
+  "tools": {
+    "metadata": "ok",
+    "visual_caption": "ok",
+    "phrase_grounding": "ok",
+    "object_detection": "ok"
+  },
+  "gaps": [
+    "图片中的文字内容未读取"
+  ],
+  "capabilities_available": [
+    "ocr.structured"
+  ],
+  "source": {
+    "tier": "gpu-fast",
+    "engine": "florence-2-base-ft",
+    "engine_version": "2026-09-11",
+    "generated_at": "2026-09-29T00:00:00+08:00",
+    "degraded": false,
+    "params": {
+      "region_dedupe_iou": 0.8
+    }
+  },
+  "timings_ms": {
+    "metadata": 3,
+    "caption": 280,
+    "grounding": 190,
+    "detection": 120
+  }
+}

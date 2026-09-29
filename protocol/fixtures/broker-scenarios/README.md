@@ -5,7 +5,7 @@ B 是无状态转发层，它的全部行为 = 对五个操作的响应 + 对 A 
 ```jsonc
 {
   "description": "…",
-  "broker": { "node_key": "…", "protocol_version": "1.1", "inflight_grace_sec": 5, "heartbeat_interval_sec": 10, "missed_heartbeats": 3 },
+  "broker": { "node_key": "…", "protocol_version": "1.2", "inflight_grace_sec": 5, "heartbeat_interval_sec": 10, "missed_heartbeats": 3 },
   "steps": [
     { "register": <ab-message 信封>, "replies": { "submit": {"http_status": 202, "body": {…}}, "get": …, "cancel": … }, "delay_sec": 0 },
     { "register": <信封>, "expect_reject": 4001 },            // 期望被拒（进程内即抛错 / ws 即关闭码）

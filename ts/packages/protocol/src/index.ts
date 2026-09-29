@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 export * from "./types.js";
 
-export const PROTOCOL_VERSION = "1.1";
+export const PROTOCOL_VERSION = "1.2";
 
 /** schema 目录：发布的包里是 <pkg>/schemas（build 时从仓库 protocol/schemas 复制）；monorepo 内开发时回退到仓库路径。 */
 function locateSchemas(): string {

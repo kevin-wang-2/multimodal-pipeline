@@ -5,7 +5,7 @@ port = 8766
 ws_path = "/ws"
 node_key = "change-me-to-a-long-random-secret"   # A 的 register 必须带同一把钥匙；不符 → 关闭码 4001
 api_key = ""                        # 非空时 C→B 需 Authorization: Bearer <api_key>
-protocol_version = "1.1"
+protocol_version = "1.2"
 inflight_grace_sec = 5              # 单请求超时 = wait + 这个 → 504 timeout；不影响连接健康
 heartbeat_interval_sec = 10
 missed_heartbeats = 3

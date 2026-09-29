@@ -118,6 +118,18 @@ export type JobDone = {
   [k: string]: unknown;
 };
 /**
+ * 自动预检产出的任务无关结构化摘要。audio 用时间段锚定事实；image 用 surface + bbox 锚定视觉索引。gaps 始终显式声明未覆盖信息。
+ */
+export type Digest = AudioDigest | ImageDigest;
+/**
+ * 规则生成的缺口清单，是 Harness 判断是否显式调用下一任务的主要依据；MMP 不据此推断用户意图。
+ */
+export type Gaps = string[];
+/**
+ * 任务无关的能力清单：这份媒体上能执行什么。项为任务类型 id，不代表 MMP 建议调用。
+ */
+export type CapabilitiesAvailable = string[];
+/**
  * A 与引擎子进程之间的 JSON-lines 协议（实施计划 §4.2）。每行一个对象，以 type 区分。A 内部使用，不暴露给 B / C；引擎只依赖标准库即可实现。媒体以本机临时文件路径传给引擎——这是进程内的实现细节，不是媒体句柄契约的一部分。
  */
 export type EngineIo = {
@@ -154,6 +166,18 @@ export interface Protocol {
   digest__Label?: Label;
   digest__Asr?: Asr;
   digest__Segment?: Segment;
+  digest__AudioDigest?: AudioDigest;
+  digest__InferenceProvenance?: InferenceProvenance;
+  digest__GeneratedDescription?: GeneratedDescription;
+  digest__ImageSurface?: ImageSurface;
+  digest__BoundingBoxPx?: BoundingBoxPx;
+  digest__ImageRegion?: ImageRegion;
+  digest__QualitySignal?: QualitySignal;
+  digest__ImageDigest?: ImageDigest;
+  digest__Tools?: Tools;
+  digest__Gaps?: Gaps;
+  digest__CapabilitiesAvailable?: CapabilitiesAvailable;
+  digest__Timings?: Timings;
   "engine-io"?: EngineIo;
   "engine-io__ReqId"?: string;
   "engine-io__Hello"?: Hello;
@@ -539,10 +563,7 @@ export interface ErrorBody {
   message?: string;
   retry_after_sec?: number;
 }
-/**
- * 预检产出的结构化 digest（架构.md §8，T4 盲测收敛）。segments 是唯一的时间轴事实源；gaps 是显式的"我还不知道什么"。v1 只定义 kind=audio；图片 / 视频在 M4 追加。
- */
-export interface Digest {
+export interface AudioDigest {
   /**
    * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
    */
@@ -558,29 +579,16 @@ export interface Digest {
    */
   segments: Segment[];
   /**
-   * 整条媒体级别的统计。便宜档不设 caption，需要描述时它是 capabilities_available 里的一项能力。
+   * 整条音频级别的统计。音频便宜档不设 caption。
    */
   global?: {
     speech_ratio?: number;
   };
-  /**
-   * 每个参与工具的状态。失败项必须显式标注，不许静默。
-   */
-  tools: {
-    [k: string]: "ok" | "partial" | "failed" | "skipped";
-  };
-  /**
-   * 规则生成的缺口清单，是上层判断"够不够"的主要依据。每条是任务无关的结构事实或"无法判定"的声明。
-   */
-  gaps: string[];
-  /**
-   * 任务无关的能力清单：这段媒体上能做什么。项为任务类型 id。
-   */
-  capabilities_available: string[];
+  tools: Tools;
+  gaps: Gaps;
+  capabilities_available: CapabilitiesAvailable;
   source: Source;
-  timings_ms?: {
-    [k: string]: number;
-  };
+  timings_ms?: Timings;
 }
 export interface Segment {
   start: number;
@@ -612,6 +620,95 @@ export interface Asr {
    */
   lang: string;
   confidence?: number | "n/a";
+}
+/**
+ * 每个参与工具的状态。失败项必须显式标注，不许静默。
+ */
+export interface Tools {
+  [k: string]: "ok" | "partial" | "failed" | "skipped";
+}
+export interface Timings {
+  [k: string]: number;
+}
+export interface ImageDigest {
+  /**
+   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
+   */
+  media_id: string;
+  kind: "image";
+  /**
+   * 输入媒体格式或容器 MIME，例如 image/jpeg、image/png、application/pdf。
+   */
+  format: string;
+  /**
+   * @minItems 1
+   */
+  surfaces: [ImageSurface, ...ImageSurface[]];
+  description?: GeneratedDescription;
+  regions: ImageRegion[];
+  /**
+   * @minItems 1
+   */
+  quality_signals: [QualitySignal, ...QualitySignal[]];
+  tools: Tools;
+  gaps: Gaps;
+  capabilities_available: CapabilitiesAvailable;
+  source: Source;
+  timings_ms?: Timings;
+}
+/**
+ * 可被区域引用的一张像素平面：普通图片只有一个 image surface；多页文档每页一个 page surface。尺寸与 bbox 均指完成 rotation_deg 归正后的像素坐标。
+ */
+export interface ImageSurface {
+  id: string;
+  kind: "image" | "page";
+  index: number;
+  width_px: number;
+  height_px: number;
+  rotation_deg: 0 | 90 | 180 | 270;
+}
+export interface GeneratedDescription {
+  text: string;
+  provenance: InferenceProvenance;
+}
+/**
+ * 明确标识生成内容是模型推断而非确定性事实；具体模型、版本和档位由 digest.source 给出。
+ */
+export interface InferenceProvenance {
+  kind: "model_inference";
+  /**
+   * @minItems 1
+   */
+  tools: [string, ...string[]];
+}
+/**
+ * 模型推断的语义区域。id 在同一 digest 内稳定唯一；后续能力按 surface_id + bbox_px 或 id 引用。
+ */
+export interface ImageRegion {
+  id: string;
+  surface_id: string;
+  bbox_px: BoundingBoxPx;
+  label: string;
+  description?: string;
+  provenance: InferenceProvenance;
+}
+/**
+ * 归正后 surface 上的左闭右开像素框 [x_min, y_min, x_max, y_max)。实现还必须保证 x_max > x_min、y_max > y_min 且不越界。
+ */
+export interface BoundingBoxPx {
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+}
+/**
+ * 可解释的执行质量信号，不是伪装成校准概率的总 confidence。failed 可触发 MMP 内部一次质量兜底。
+ */
+export interface QualitySignal {
+  code: string;
+  status: "ok" | "warning" | "failed";
+  value?: boolean | number | string;
+  detail?: string;
 }
 /**
  * 引擎→A。启动后的第一行；A 收到前不发任务。engine_version 必须与注册表一致，否则 A 拒绝该引擎。

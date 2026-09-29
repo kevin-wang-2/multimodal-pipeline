@@ -1,0 +1,38 @@
+{
+  "media_id": "sha256:ba12d23103dfc292c9c5158397fe74f302184ee104825e3f3ff6e55d958b9591",
+  "kind": "image",
+  "format": "image/jpeg",
+  "surfaces": [
+    {
+      "id": "image_0",
+      "kind": "image",
+      "index": 0,
+      "width_px": 640,
+      "height_px": 480,
+      "rotation_deg": 0
+    }
+  ],
+  "description": {
+    "text": "一辆汽车停在建筑前"
+  },
+  "regions": [],
+  "quality_signals": [
+    {
+      "code": "description_nonempty",
+      "status": "ok"
+    }
+  ],
+  "tools": {
+    "metadata": "ok",
+    "visual_caption": "ok"
+  },
+  "gaps": [],
+  "capabilities_available": [],
+  "source": {
+    "tier": "gpu-fast",
+    "engine": "florence-2-base-ft",
+    "engine_version": "2026-09-11",
+    "generated_at": "2026-09-29T00:00:00+08:00",
+    "degraded": false
+  }
+}

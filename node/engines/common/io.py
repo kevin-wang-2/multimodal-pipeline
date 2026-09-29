@@ -15,7 +15,7 @@ import threading
 import traceback
 from typing import Awaitable, Callable
 
-PROTOCOL_VERSION = "1.1"
+PROTOCOL_VERSION = "1.2"
 RunFn = Callable[[dict, asyncio.Event], Awaitable[tuple[object, dict]]]
 
 # 协议帧只走原始 stdout 的字节流；之后把 sys.stdout 指到 stderr，第三方库的 print 就污染不了 JSON 流

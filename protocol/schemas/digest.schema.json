@@ -2,56 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mmp:protocol:1:digest",
   "title": "Digest",
-  "description": "预检产出的结构化 digest（架构.md §8，T4 盲测收敛）。segments 是唯一的时间轴事实源；gaps 是显式的\"我还不知道什么\"。v1 只定义 kind=audio；图片 / 视频在 M4 追加。",
-  "type": "object",
-  "properties": {
-    "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
-    "kind": { "type": "string", "enum": ["audio"] },
-    "duration_sec": { "type": "number", "minimum": 0 },
-    "timeline_unit": {
-      "description": "统一为秒（浮点）；区间左闭右开 [start, end)。",
-      "const": "sec"
-    },
-    "segments": {
-      "description": "覆盖全时长、按 start 升序、彼此不重叠的段。空媒体允许为空数组。",
-      "type": "array",
-      "items": { "$ref": "#/$defs/Segment" }
-    },
-    "global": {
-      "description": "整条媒体级别的统计。便宜档不设 caption，需要描述时它是 capabilities_available 里的一项能力。",
-      "type": "object",
-      "properties": {
-        "speech_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
-      },
-      "additionalProperties": false
-    },
-    "tools": {
-      "description": "每个参与工具的状态。失败项必须显式标注，不许静默。",
-      "type": "object",
-      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
-      "additionalProperties": { "$ref": "#/$defs/ToolStatus" },
-      "minProperties": 1
-    },
-    "gaps": {
-      "description": "规则生成的缺口清单，是上层判断\"够不够\"的主要依据。每条是任务无关的结构事实或\"无法判定\"的声明。",
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "capabilities_available": {
-      "description": "任务无关的能力清单：这段媒体上能做什么。项为任务类型 id。",
-      "type": "array",
-      "items": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
-      "uniqueItems": true
-    },
-    "source": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Source" },
-    "timings_ms": {
-      "type": "object",
-      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
-      "additionalProperties": { "type": "integer", "minimum": 0 }
-    }
-  },
-  "required": ["media_id", "kind", "duration_sec", "timeline_unit", "segments", "tools", "gaps", "capabilities_available", "source"],
-  "additionalProperties": false,
+  "description": "自动预检产出的任务无关结构化摘要。audio 用时间段锚定事实；image 用 surface + bbox 锚定视觉索引。gaps 始终显式声明未覆盖信息。",
+  "oneOf": [
+    { "$ref": "#/$defs/AudioDigest" },
+    { "$ref": "#/$defs/ImageDigest" }
+  ],
   "$defs": {
     "ToolStatus": {
       "type": "string",
@@ -114,6 +69,177 @@
       "if": { "properties": { "label_status": { "const": "ok" } } },
       "then": { "properties": { "labels": { "type": "array", "minItems": 1 } } },
       "else": { "properties": { "labels": { "type": "array", "maxItems": 0 } } }
+    },
+    "AudioDigest": {
+      "type": "object",
+      "properties": {
+        "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+        "kind": { "const": "audio" },
+        "duration_sec": { "type": "number", "minimum": 0 },
+        "timeline_unit": {
+          "description": "统一为秒（浮点）；区间左闭右开 [start, end)。",
+          "const": "sec"
+        },
+        "segments": {
+          "description": "覆盖全时长、按 start 升序、彼此不重叠的段。空媒体允许为空数组。",
+          "type": "array",
+          "items": { "$ref": "#/$defs/Segment" }
+        },
+        "global": {
+          "description": "整条音频级别的统计。音频便宜档不设 caption。",
+          "type": "object",
+          "properties": {
+            "speech_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "tools": { "$ref": "#/$defs/Tools" },
+        "gaps": { "$ref": "#/$defs/Gaps" },
+        "capabilities_available": { "$ref": "#/$defs/CapabilitiesAvailable" },
+        "source": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Source" },
+        "timings_ms": { "$ref": "#/$defs/Timings" }
+      },
+      "required": ["media_id", "kind", "duration_sec", "timeline_unit", "segments", "tools", "gaps", "capabilities_available", "source"],
+      "additionalProperties": false
+    },
+    "InferenceProvenance": {
+      "description": "明确标识生成内容是模型推断而非确定性事实；具体模型、版本和档位由 digest.source 给出。",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "model_inference" },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": ["kind", "tools"],
+      "additionalProperties": false
+    },
+    "GeneratedDescription": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "provenance": { "$ref": "#/$defs/InferenceProvenance" }
+      },
+      "required": ["text", "provenance"],
+      "additionalProperties": false
+    },
+    "ImageSurface": {
+      "description": "可被区域引用的一张像素平面：普通图片只有一个 image surface；多页文档每页一个 page surface。尺寸与 bbox 均指完成 rotation_deg 归正后的像素坐标。",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+        "kind": { "type": "string", "enum": ["image", "page"] },
+        "index": { "type": "integer", "minimum": 0 },
+        "width_px": { "type": "integer", "minimum": 1 },
+        "height_px": { "type": "integer", "minimum": 1 },
+        "rotation_deg": { "type": "integer", "enum": [0, 90, 180, 270] }
+      },
+      "required": ["id", "kind", "index", "width_px", "height_px", "rotation_deg"],
+      "additionalProperties": false
+    },
+    "BoundingBoxPx": {
+      "description": "归正后 surface 上的左闭右开像素框 [x_min, y_min, x_max, y_max)。实现还必须保证 x_max > x_min、y_max > y_min 且不越界。",
+      "type": "object",
+      "properties": {
+        "x_min": { "type": "integer", "minimum": 0 },
+        "y_min": { "type": "integer", "minimum": 0 },
+        "x_max": { "type": "integer", "minimum": 1 },
+        "y_max": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["x_min", "y_min", "x_max", "y_max"],
+      "additionalProperties": false
+    },
+    "ImageRegion": {
+      "description": "模型推断的语义区域。id 在同一 digest 内稳定唯一；后续能力按 surface_id + bbox_px 或 id 引用。",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+        "surface_id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+        "bbox_px": { "$ref": "#/$defs/BoundingBoxPx" },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "provenance": { "$ref": "#/$defs/InferenceProvenance" }
+      },
+      "required": ["id", "surface_id", "bbox_px", "label", "provenance"],
+      "additionalProperties": false
+    },
+    "QualitySignal": {
+      "description": "可解释的执行质量信号，不是伪装成校准概率的总 confidence。failed 可触发 MMP 内部一次质量兜底。",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "status": { "type": "string", "enum": ["ok", "warning", "failed"] },
+        "value": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "number" },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
+        "detail": { "type": "string", "minLength": 1 }
+      },
+      "required": ["code", "status"],
+      "additionalProperties": false
+    },
+    "ImageDigest": {
+      "type": "object",
+      "properties": {
+        "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+        "kind": { "const": "image" },
+        "format": {
+          "description": "输入媒体格式或容器 MIME，例如 image/jpeg、image/png、application/pdf。",
+          "type": "string",
+          "minLength": 1
+        },
+        "surfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ImageSurface" },
+          "minItems": 1
+        },
+        "description": { "$ref": "#/$defs/GeneratedDescription" },
+        "regions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ImageRegion" }
+        },
+        "quality_signals": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/QualitySignal" },
+          "minItems": 1
+        },
+        "tools": { "$ref": "#/$defs/Tools" },
+        "gaps": { "$ref": "#/$defs/Gaps" },
+        "capabilities_available": { "$ref": "#/$defs/CapabilitiesAvailable" },
+        "source": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Source" },
+        "timings_ms": { "$ref": "#/$defs/Timings" }
+      },
+      "required": ["media_id", "kind", "format", "surfaces", "regions", "quality_signals", "tools", "gaps", "capabilities_available", "source"],
+      "additionalProperties": false
+    },
+    "Tools": {
+      "description": "每个参与工具的状态。失败项必须显式标注，不许静默。",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/ToolStatus" },
+      "minProperties": 1
+    },
+    "Gaps": {
+      "description": "规则生成的缺口清单，是 Harness 判断是否显式调用下一任务的主要依据；MMP 不据此推断用户意图。",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "CapabilitiesAvailable": {
+      "description": "任务无关的能力清单：这份媒体上能执行什么。项为任务类型 id，不代表 MMP 建议调用。",
+      "type": "array",
+      "items": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+      "uniqueItems": true
+    },
+    "Timings": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "type": "integer", "minimum": 0 }
     }
   }
 }

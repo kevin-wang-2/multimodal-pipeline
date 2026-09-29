@@ -1,0 +1,48 @@
+{
+  "media_id": "sha256:b1f22d21807b82947ba59a2f731d4106d305aaa5e30782357218357cfe6fa667",
+  "kind": "image",
+  "format": "application/pdf",
+  "surfaces": [
+    {
+      "id": "page_0",
+      "kind": "page",
+      "index": 0,
+      "width_px": 2481,
+      "height_px": 1654,
+      "rotation_deg": 0
+    }
+  ],
+  "regions": [],
+  "quality_signals": [
+    {
+      "code": "description_nonempty",
+      "status": "failed",
+      "value": false,
+      "detail": "基础档与内部兜底均未产出可用描述"
+    }
+  ],
+  "tools": {
+    "metadata": "ok",
+    "visual_caption": "failed",
+    "phrase_grounding": "skipped",
+    "object_detection": "failed"
+  },
+  "gaps": [
+    "视觉描述失败，页面内容未知",
+    "页面中的文字内容未读取"
+  ],
+  "capabilities_available": [
+    "ocr.structured"
+  ],
+  "source": {
+    "tier": "gpu",
+    "engine": "florence-2-large-ft",
+    "engine_version": "2026-09-11",
+    "generated_at": "2026-09-29T00:00:00+08:00",
+    "degraded": true,
+    "degraded_reason": "partial_failure",
+    "params": {
+      "fallback_reason": "empty_description"
+    }
+  }
+}

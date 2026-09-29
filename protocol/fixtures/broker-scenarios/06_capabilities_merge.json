@@ -117,7 +117,7 @@
       "expect": {
         "http_status": 200,
         "body": {
-          "protocol_version": "1.1",
+          "protocol_version": "1.2",
           "capabilities": [
             {
               "capability": {

@@ -55,7 +55,7 @@ export class Broker {
 
   constructor(o: BrokerOptions) {
     this.nodeKey = o.nodeKey;
-    this.protocolVersion = o.protocolVersion ?? "1.1";
+    this.protocolVersion = o.protocolVersion ?? "1.2";
     this.inflightGraceSec = o.inflightGraceSec ?? 5;
     this.offlineAfter = (o.heartbeatIntervalSec ?? 10) * (o.missedHeartbeats ?? 3);
     this.now = o.now ?? (() => Date.now() / 1000);

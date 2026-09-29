@@ -2,7 +2,7 @@
  * digest → 注入块：确定性模板（铁律 8），带边界标记，含 source 与降级标注。
  * 给纯文本主模型看的；目标是"够选工具、指对时间段"，不是复述一切。
  */
-import type { Digest } from "@mmp/protocol";
+import type { AudioDigest, Digest } from "@mmp/protocol";
 
 export interface RenderOptions {
   /** 每段最多列几个标签 */
@@ -16,6 +16,8 @@ export interface RenderOptions {
 const fmt = (t: number) => t.toFixed(2);
 
 export function renderDigest(d: Digest, o: RenderOptions = {}): string {
+  // #25 才负责图片 digest 的确定性宿主渲染；在此之前禁止把图片误按音频时间轴输出。
+  if (d.kind !== "audio") throw new Error("image digest rendering is not implemented");
   const tag = o.tag ?? "mmp:digest";
   const maxLabels = o.maxLabels ?? 2;
   const maxSeg = o.maxSegments ?? 40;
@@ -29,7 +31,7 @@ export function renderDigest(d: Digest, o: RenderOptions = {}): string {
   lines.push(`时间轴（秒，[start,end)）：`);
   const segs = d.segments;
   // 协议 §7：asr 对象 = 语音段；asr === null = 非语音段（不适用）；asr 省略 = 语音段但 ASR 失败
-  const render = (s: Digest["segments"][number]) => {
+  const render = (s: AudioDigest["segments"][number]) => {
     const span = `[${fmt(s.start)}, ${fmt(s.end)})`;
     if (s.asr && typeof s.asr === "object") {
       const lang = s.asr.lang && s.asr.lang !== "n/a" ? ` (${s.asr.lang})` : "";

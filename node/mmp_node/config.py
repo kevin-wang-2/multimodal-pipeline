@@ -14,7 +14,7 @@ ENV_PREFIX = "MMP_"
 class NodeSection(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
     key: str = Field(min_length=16)
-    protocol_version: str = "1.1"
+    protocol_version: str = "1.2"
     data_dir: Path = Path("./cache")
 
 

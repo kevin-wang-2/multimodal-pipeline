@@ -35,7 +35,9 @@ class Node:
         self._check_vram_budget()
         self.media = MediaStore(cfg.media, cfg.node.data_dir)
         self.cache = ResultCache(cfg.cache_path)
-        self.pool = EnginePool(cfg.scheduler.engine_start_timeout_sec, cfg.scheduler.idle_unload_sec, cfg.node.protocol_version)
+        self.pool = EnginePool(cfg.scheduler.engine_start_timeout_sec, cfg.scheduler.idle_unload_sec,
+                               cfg.node.protocol_version, self.registry.engines.values(),
+                               cfg.scheduler.vram_total_mb, cfg.scheduler.vram_headroom_mb)
         self.sched = Scheduler(cfg, self.registry, self.pool, self.cache, self.media)
         self.jobs: dict[str, Job] = {}
         self._seq = 0
@@ -43,12 +45,21 @@ class Node:
         self._gc_task: asyncio.Task | None = None
 
     def _check_vram_budget(self) -> None:
+        usable = self.cfg.scheduler.vram_total_mb - self.cfg.scheduler.vram_headroom_mb
+        if usable < 0:
+            raise ValueError("scheduler.vram_headroom_mb exceeds vram_total_mb")
         for cap in self.registry.capabilities():
             for t in cap["tiers"]:
-                if t.get("vram_mb", 0) > self.cfg.scheduler.vram_total_mb:
-                    raise ValueError(f"{cap['id']}@{t['tier']} needs {t['vram_mb']} MiB VRAM > scheduler.vram_total_mb={self.cfg.scheduler.vram_total_mb}")
+                if t.get("vram_mb", 0) > usable:
+                    raise ValueError(f"{cap['id']}@{t['tier']} needs {t['vram_mb']} MiB VRAM > usable VRAM={usable}")
+        for spec in self.registry.engines.values():
+            if spec.run_vram_mb > usable:
+                raise ValueError(f"internal engine {spec.name} needs {spec.run_vram_mb} MiB VRAM > usable VRAM={usable}")
+            if spec.keep_warm and spec.resident_vram_mb <= 0:
+                raise ValueError(f"keep_warm engine {spec.name} must declare resident_vram_mb")
 
     async def start(self) -> None:
+        self.pool.start()
         self.sched.start()
         self._gc_task = asyncio.create_task(self._gc_loop(), name="mmp-job-gc")
 

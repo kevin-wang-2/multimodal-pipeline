@@ -1,0 +1,9 @@
+{
+  "type": "result",
+  "id": "gpu-node-01ARZ3NDEKTSV4RRFFQ69G5FAV#1",
+  "result": {},
+  "retry": {
+    "engine": "triage_image_large",
+    "reason": "empty_description"
+  }
+}

@@ -41,6 +41,8 @@ class Scheduler:
         self._running: dict[str, Job] = {}
         self._slots: dict[tuple[str, str], int] = {}   # (engine, tier) → 在跑数
         self._vram_used = 0
+        self._vram_reservations: dict[str, int] = {}
+        self._resource_changed = asyncio.Event()
         self._wake = asyncio.Event()
         self._loop_task: asyncio.Task | None = None
         self._durations: dict[tuple[str, str], float] = {}  # 移动平均，供 eta
@@ -134,17 +136,37 @@ class Scheduler:
         if self._slots.get(slot, 0) >= t.get("max_concurrency", 1):
             return False
         vram = t.get("vram_mb", 0)
-        return vram == 0 or self._vram_used + vram <= self.cfg.scheduler.vram_total_mb
+        usable = max(0, self.cfg.scheduler.vram_total_mb - self.cfg.scheduler.vram_headroom_mb)
+        return vram == 0 or self._vram_used + vram <= usable
 
     def _acquire(self, job: Job) -> None:
         t = job.tier
         self._slots[(t["engine"], t["tier"])] = self._slots.get((t["engine"], t["tier"]), 0) + 1
-        self._vram_used += t.get("vram_mb", 0)
+        vram = t.get("vram_mb", 0)
+        self._vram_used += vram
+        self._vram_reservations[job.job_id] = vram
 
     def _release(self, job: Job) -> None:
         t = job.tier
         self._slots[(t["engine"], t["tier"])] -= 1
-        self._vram_used -= t.get("vram_mb", 0)
+        self._vram_used -= self._vram_reservations.pop(job.job_id, t.get("vram_mb", 0))
+        self._resource_changed.set()
+
+    async def _switch_vram_reservation(self, job: Job, vram_mb: int) -> None:
+        """内部多阶段任务先释放上一阶段，再等待新阶段预算；不改变对外 tier 或缓存键。"""
+        old = self._vram_reservations.get(job.job_id, 0)
+        self._vram_used -= old
+        self._vram_reservations[job.job_id] = 0
+        self._resource_changed.set()
+        self._wake.set()
+        usable = max(0, self.cfg.scheduler.vram_total_mb - self.cfg.scheduler.vram_headroom_mb)
+        while self._vram_used + vram_mb > usable:
+            self._resource_changed.clear()
+            if self._vram_used + vram_mb <= usable:
+                break
+            await self._resource_changed.wait()
+        self._vram_used += vram_mb
+        self._vram_reservations[job.job_id] = vram_mb
 
     async def _loop(self) -> None:
         while True:
@@ -174,17 +196,40 @@ class Scheduler:
         job.queue_position = None
         t0 = time.monotonic()
         degraded_reason: str | None = None
+        actual_source: dict | None = None
+        internal_retry_used = False
+        fallback_reason: str | None = None
+        phase_timings: dict[str, int] = {}
+        phase_metrics: dict[str, float] = {}
         try:
             media_path = await self._normalize_media(job)
+            spec = self.registry.engine_for(job.task_type, job.tier["tier"])
             while True:
-                spec = self.registry.engine_for(job.task_type, job.tier["tier"])
-                proc = await asyncio.shield(self.pool.get(spec))
                 run_job = {"job_id": job.job_id, "task_type": job.task_type, "tier": job.tier["tier"],
                            "media_id": job.media_id, "params": job.params}
+                if fallback_reason:
+                    run_job["internal"] = {"fallback_reason": fallback_reason}
                 if media_path is not None:
                     run_job["media_path"] = str(media_path)
+                stage_vram = self._vram_reservations.get(job.job_id, job.tier.get("vram_mb", 0))
                 try:
-                    res = await proc.run(run_job, spec.timeout_sec)
+                    res = await self.pool.run(spec, run_job, spec.timeout_sec, stage_vram)
+                    if res.retry is not None:
+                        if internal_retry_used:
+                            raise ApiError("engine_failed", "engine requested more than one internal retry")
+                        target = self.registry.engines.get(str(res.retry.get("engine")))
+                        if target is None or target.internal_source is None or target.run_vram_mb <= 0:
+                            raise ApiError("engine_failed", f"invalid internal retry engine {res.retry.get('engine')!r}")
+                        internal_retry_used = True
+                        phase_timings.update({f"base_{k}": int(v) for k, v in res.timings_ms.items()})
+                        phase_metrics.update({f"base_{k}": float(v) for k, v in (res.metrics or {}).items()})
+                        reason = str(res.retry.get("reason") or "quality_failure")
+                        await self._switch_vram_reservation(job, target.run_vram_mb)
+                        spec = target
+                        fallback_reason = reason
+                        actual_source = dict(target.internal_source)
+                        degraded_reason = "partial_failure"
+                        continue
                     break
                 except asyncio.TimeoutError:
                     cheaper = self.registry.cheaper_tier(job.task_type, job.tier["tier"])
@@ -194,13 +239,27 @@ class Scheduler:
                     self._release(job)
                     job.tier = cheaper
                     self._acquire(job)
+                    spec = self.registry.engine_for(job.task_type, job.tier["tier"])
                     degraded_reason = "timeout"
-            job.timings_ms.update({k: int(v) for k, v in res.timings_ms.items()})
+            final_timings = {k: int(v) for k, v in res.timings_ms.items()}
+            if internal_retry_used:
+                phase_timings.update({f"large_{k}": v for k, v in final_timings.items()})
+                final_timings = phase_timings
+                if isinstance(res.result, dict):
+                    res.result["timings_ms"] = dict(final_timings)
+                phase_metrics.update({f"large_{k}": float(v) for k, v in (res.metrics or {}).items()})
+            else:
+                phase_metrics.update({k: float(v) for k, v in (res.metrics or {}).items()})
+            job.engine_metrics.update(phase_metrics)
+            job.timings_ms.update(final_timings)
             job.timings_ms["total"] = int((time.monotonic() - t0) * 1000)
             job.source = {
                 "tier": job.tier["tier"], "engine": job.tier["engine"], "engine_version": job.tier["engine_version"],
                 "generated_at": _now_iso(), "degraded": degraded_reason is not None, "params": job.params,
             }
+            if actual_source:
+                job.source.update(actual_source)
+                job.source["params"] = {**job.params, "fallback_reason": fallback_reason}
             if degraded_reason:
                 job.source["degraded_reason"] = degraded_reason
             result = self._finish_result(job, res.result)

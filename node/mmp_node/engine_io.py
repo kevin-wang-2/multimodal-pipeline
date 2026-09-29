@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .errors import ApiError
@@ -27,8 +28,10 @@ class EngineCancelled(Exception):
 
 @dataclass
 class EngineResult:
-    result: object
+    result: object | None
     timings_ms: dict
+    retry: dict | None = None
+    metrics: dict | None = None
 
 
 class EngineProcess:
@@ -123,7 +126,8 @@ class EngineProcess:
                 if fut is None or fut.done():
                     continue
                 if t == "result":
-                    fut.set_result(EngineResult(result=msg.get("result"), timings_ms=msg.get("timings_ms") or {}))
+                    fut.set_result(EngineResult(result=msg.get("result"), timings_ms=msg.get("timings_ms") or {},
+                                                retry=msg.get("retry"), metrics=msg.get("metrics") or {}))
                 elif t == "error":
                     code = msg.get("error", "engine_failed")
                     if code == "cancelled":
@@ -206,21 +210,42 @@ class EngineProcess:
 
 
 class EnginePool:
-    """按需起、空闲杀。start 的并发由锁保护，避免同一引擎起两个进程。"""
+    """引擎进程池。
 
-    def __init__(self, start_timeout: float, idle_unload_sec: float, protocol_version: str):
+    CPU 引擎按需启动并按 idle timeout 回收。GPU 以容量而不是引擎类别调度：活跃任务按
+    峰值预留，空闲进程按 resident_vram_mb 占用；只有总量越过安全预算时才驱逐空闲进程。
+    keep_warm 是可回收的空闲偏好，任务结束后按优先级把放得下的集合补回来。
+    """
+
+    def __init__(self, start_timeout: float, idle_unload_sec: float, protocol_version: str,
+                 specs: Iterable[EngineSpec] = (), vram_total_mb: int = 0, vram_headroom_mb: int = 0):
         self.start_timeout = start_timeout
         self.idle_unload_sec = idle_unload_sec
         self.protocol_version = protocol_version
+        self._specs = {s.name: s for s in specs}
         self._procs: dict[str, EngineProcess] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._leases: dict[str, int] = {}
+        self._gpu_transition = asyncio.Lock()
+        self._capacity_changed = asyncio.Condition(self._gpu_transition)
+        self._active_vram_mb = 0
+        self._usable_vram_mb = max(0, vram_total_mb - vram_headroom_mb)
         self._reaper: asyncio.Task | None = None
+        self._warm_task: asyncio.Task | None = None
         self._closing = False
+
+    @staticmethod
+    def _is_gpu(spec: EngineSpec) -> bool:
+        return bool(spec.resident_vram_mb or spec.run_vram_mb
+                    or any(t.get("vram_mb", 0) > 0 for t in spec.tiers.values()))
+
+    def start(self) -> None:
+        self._schedule_warm()
 
     def loaded(self) -> list[str]:
         return sorted(n for n, p in self._procs.items() if p.alive)
 
-    async def get(self, spec: EngineSpec) -> EngineProcess:
+    async def _get(self, spec: EngineSpec) -> EngineProcess:
         lock = self._locks.setdefault(spec.name, asyncio.Lock())
         async with lock:
             if self._closing:
@@ -234,12 +259,100 @@ class EnginePool:
                 self._reaper = asyncio.create_task(self._reap_loop())
             return p
 
+    async def get(self, spec: EngineSpec) -> EngineProcess:
+        """兼容只取进程的内部入口；任务执行应使用 run() 以持有生命周期 lease。"""
+        return await self._get(spec)
+
+    async def run(self, spec: EngineSpec, job: dict, timeout_sec: float, vram_mb: int = 0) -> EngineResult:
+        if vram_mb:
+            async with self._capacity_changed:
+                while self._active_vram_mb + vram_mb > self._usable_vram_mb:
+                    await self._capacity_changed.wait()
+                await self._evict_until_fit(spec.name, vram_mb)
+                self._active_vram_mb += vram_mb
+                try:
+                    proc = await self._get(spec)
+                except Exception:
+                    self._active_vram_mb -= vram_mb
+                    self._capacity_changed.notify_all()
+                    raise
+                self._leases[spec.name] = self._leases.get(spec.name, 0) + 1
+        else:
+            proc = await self._get(spec)
+            self._leases[spec.name] = self._leases.get(spec.name, 0) + 1
+        try:
+            return await proc.run(job, timeout_sec)
+        finally:
+            if vram_mb:
+                async with self._capacity_changed:
+                    self._leases[spec.name] = max(0, self._leases.get(spec.name, 1) - 1)
+                    self._active_vram_mb -= vram_mb
+                    if not spec.keep_warm and self._leases[spec.name] == 0:
+                        await proc.shutdown()
+                    self._capacity_changed.notify_all()
+                    self._schedule_warm()
+            else:
+                self._leases[spec.name] = max(0, self._leases.get(spec.name, 1) - 1)
+
+    def _idle_resident_mb(self, exclude: str | None = None) -> int:
+        return sum(
+            spec.resident_vram_mb
+            for name, spec in self._specs.items()
+            if name != exclude and spec.resident_vram_mb and self._leases.get(name, 0) == 0
+            and (proc := self._procs.get(name)) is not None and proc.alive and proc.busy == 0
+        )
+
+    async def _evict_until_fit(self, wanted: str, additional_vram_mb: int) -> None:
+        candidates = []
+        for name, proc in self._procs.items():
+            spec = self._specs.get(name)
+            if (name != wanted and spec is not None and self._is_gpu(spec)
+                    and self._leases.get(name, 0) == 0 and proc.busy == 0 and proc.alive):
+                candidates.append((1 if spec.keep_warm else 0, spec.warm_priority, proc.last_used, name, proc))
+        for _, _, _, name, proc in sorted(candidates):
+            needed = self._active_vram_mb + additional_vram_mb + self._idle_resident_mb(exclude=wanted)
+            if needed <= self._usable_vram_mb:
+                break
+            log.info("unloading idle GPU engine %s for %s (%d > %d MiB)",
+                     name, wanted, needed, self._usable_vram_mb)
+            await proc.shutdown()
+
+    def _schedule_warm(self) -> None:
+        if self._closing or not any(s.keep_warm for s in self._specs.values()):
+            return
+        if self._warm_task is None or self._warm_task.done():
+            self._warm_task = asyncio.create_task(self._restore_warm(), name="mmp-engine-warm")
+
+    async def _restore_warm(self) -> None:
+        # 让刚结束任务的响应和紧邻的排队任务先推进，避免在交付路径里等待模型加载。
+        await asyncio.sleep(0)
+        async with self._capacity_changed:
+            if self._closing:
+                return
+            warm_specs = sorted((s for s in self._specs.values() if s.keep_warm),
+                                key=lambda s: (-s.warm_priority, s.name))
+            for warm in warm_specs:
+                proc = self._procs.get(warm.name)
+                if proc is not None and proc.alive:
+                    continue
+                needed = self._active_vram_mb + self._idle_resident_mb() + warm.resident_vram_mb
+                if needed > self._usable_vram_mb:
+                    continue
+                try:
+                    await self._get(warm)
+                    log.info("keep_warm GPU engine %s is ready", warm.name)
+                except Exception:
+                    log.exception("failed to restore keep_warm engine %s", warm.name)
+
     async def _reap_loop(self) -> None:
         while True:
             await asyncio.sleep(max(1.0, min(30.0, self.idle_unload_sec / 4)))
             now = time.monotonic()
             for name, p in list(self._procs.items()):
                 if p.alive and p.busy == 0 and now - p.last_used > self.idle_unload_sec:
+                    spec = self._specs.get(name)
+                    if spec is not None and spec.keep_warm:
+                        continue
                     log.info("engine %s idle for %.0fs, unloading", name, now - p.last_used)
                     await p.shutdown()
 
@@ -249,6 +362,8 @@ class EnginePool:
         self._closing = True
         if self._reaper:
             self._reaper.cancel()
+        if self._warm_task:
+            self._warm_task.cancel()
         for lock in list(self._locks.values()):
             async with lock:
                 pass

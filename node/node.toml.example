@@ -14,6 +14,7 @@ retry_after_sec = 5                 # 429 时给 C 的建议
 
 [scheduler]
 vram_total_mb = 0                   # 0 = 无 GPU；引擎 tier 的 vram_mb 之和不得超过它
+vram_headroom_mb = 0                # CUDA / 碎片安全余量；可用预算 = total - headroom
 idle_unload_sec = 300               # 引擎空闲多久后 kill 子进程（显存释放 = 结束进程）
 engine_start_timeout_sec = 120      # 等 hello 的时限（VLM 冷加载约 76s）
 
@@ -53,3 +54,22 @@ module = "engines.echo"             # python -m <module>，cwd = node/
 # cmd = ["/path/to/conda/env/bin/python", "-m", "engines.echo"]   # 引擎自己的解释器
 timeout_sec = 30                    # 单任务时限；超时且无更便宜档 → 504 timeout
 # max_concurrency = 2               # 覆盖 CAPABILITY.tiers[].max_concurrency（按 tier 名）
+
+# GPU 常驻是“空闲偏好”而不是不可驱逐：容量够可与重模型共存，超预算只驱逐空闲模型。
+# [engines.triage_image]
+# module = "engines.triage_image"
+# python = "C:/mmp/envs/vision/Scripts/python.exe"
+# timeout_sec = 120
+# resident_vram_mb = 512
+# keep_warm = true
+# warm_priority = 100
+# env = { MMP_FLORENCE_MODEL = "C:/mmp/models/Florence-2-base-ft-native" }
+
+# large 不对外注册，只接受 base 的一次内部质量兜底；每次执行独立申请峰值预算，结束即卸载。
+# [engines.triage_image_large]
+# module = "engines.triage_image_large"
+# python = "C:/mmp/envs/vision/Scripts/python.exe"
+# timeout_sec = 120
+# resident_vram_mb = 1536
+# run_vram_mb = 2048
+# env = { MMP_FLORENCE_MODEL = "C:/mmp/models/Florence-2-large-ft-native" }

@@ -25,6 +25,7 @@ class QueueSection(BaseModel):
 
 class SchedulerSection(BaseModel):
     vram_total_mb: int = 0
+    vram_headroom_mb: int = 0
     idle_unload_sec: float = 300
     engine_start_timeout_sec: float = 120
 
@@ -75,6 +76,10 @@ class EngineSection(BaseModel):
     env: dict[str, str] = {}           # 追加给子进程的环境变量（如 MMP_MODELS_DIR）
     timeout_sec: float = 30
     max_concurrency: dict[str, int] | int | None = None
+    resident_vram_mb: int = 0         # 进程已加载、没有任务时的显存占用
+    run_vram_mb: int = 0              # 无公开 capability 的内部阶段峰值预算
+    keep_warm: bool = False           # GPU 有余量时主动恢复为默认空闲态
+    warm_priority: int = 0            # 越大越优先保留 / 恢复
 
 
 class Config(BaseModel):

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:1:media-handle",
+  "$id": "urn:mmp:protocol:2:media-handle",
   "title": "MediaHandle",
   "description": "媒体句柄（架构.md §6）。一种契约、多种实例：A 只做 HTTP GET / PUT，不认识任何存储厂商。inline / get / ref 至少一个；ref 是内容引用（此前某次响应里的 media_id），A 本地已有则不再取；ref 与 inline/get 同时给时，A 缺内容才取，取到后校验 hash。put 可选，供大输出写回。内容 hash 由 A 取到字节后计算，与来源无关。",
   "type": "object",

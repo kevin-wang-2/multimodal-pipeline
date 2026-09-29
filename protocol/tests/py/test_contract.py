@@ -10,7 +10,7 @@ def test_schemas_are_valid_2020_12(schemas):
     for name, s in schemas.items():
         Draft202012Validator.check_schema(s)
         assert s["$schema"] == "https://json-schema.org/draft/2020-12/schema", name
-        assert s["$id"] == f"urn:mmp:protocol:1:{name}", name
+        assert s["$id"] == f"urn:mmp:protocol:2:{name}", name
 
 
 def test_format_checker_actually_checks():

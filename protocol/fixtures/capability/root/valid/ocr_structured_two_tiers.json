@@ -1,6 +1,5 @@
 {
   "id": "ocr.structured",
-  "modal": "document",
   "description": "文档 OCR：快档出文本行，慢档出版面结构（Markdown + 元素标签）。",
   "tiers": [
     {
@@ -23,7 +22,13 @@
     }
   ],
   "input": {
-    "media": "required",
+    "media": {
+      "presence": "required",
+      "accepts": [
+        "image/*",
+        "application/pdf"
+      ]
+    },
     "params_schema": {
       "type": "object",
       "properties": {
@@ -37,15 +42,19 @@
       }
     }
   },
-  "output_schema": {
-    "type": "object",
-    "properties": {
-      "pages": {
-        "type": "array"
-      }
+  "purpose": "ocr",
+  "output": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "pages": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "pages"
+      ]
     },
-    "required": [
-      "pages"
-    ]
+    "agent_context": "none"
   }
 }

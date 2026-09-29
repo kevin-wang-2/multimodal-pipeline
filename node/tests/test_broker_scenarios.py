@@ -52,7 +52,7 @@ async def test_scenario(path: Path):
     sc = json.loads(path.read_text(encoding="utf-8"))
     clock = {"t": 1_700_000_000.0}
     b = sc.get("broker", {})
-    broker = Broker(b["node_key"], b.get("protocol_version", "1.2"), b.get("inflight_grace_sec", 5),
+    broker = Broker(b["node_key"], b.get("protocol_version", "2.0"), b.get("inflight_grace_sec", 5),
                     b.get("heartbeat_interval_sec", 10), b.get("missed_heartbeats", 3), now=lambda: clock["t"])
     fakes: dict[str, FakeNode] = {}
     for i, step in enumerate(sc["steps"]):

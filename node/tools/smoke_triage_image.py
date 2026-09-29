@@ -81,12 +81,17 @@ async def main() -> None:
                                                 "media": {"inline": base64.b64encode(data).decode()}, "wait": 120})
             wall = time.monotonic() - t0
             digest = body.get("result") or {}
-            errs = list(validator_for("urn:mmp:protocol:1:digest").iter_errors(digest))
+            errs = list(validator_for("urn:mmp:protocol:2:digest").iter_errors(digest))
             print(json.dumps({"image": path.name, "status": status, "wall_s": round(wall, 3),
                               "source": digest.get("source"), "regions": len(digest.get("regions", [])),
                               "metrics": node.jobs.get(body.get("job_id")).engine_metrics if body.get("job_id") in node.jobs else {}},
                              ensure_ascii=False))
             if status != 200 or errs: failures.append(f"{path.name}: status/schema {status} {errs[:1]}")
+            context = (body.get("agent_context") or {}).get("text", "")
+            if not (context.startswith("[mmp:agent-context start]") and "kind=image" in context and
+                    "像素平面：" in context and "质量信号：" in context and
+                    context.endswith("[mmp:agent-context end]")):
+                failures.append(f"{path.name}: agent_context missing image surfaces/quality/boundaries")
             if path.suffix.lower() == ".pdf":
                 if digest.get("format") != "application/pdf" or digest.get("surfaces", [{}])[0].get("kind") != "page":
                     failures.append("PDF was not represented as page surfaces")
@@ -115,6 +120,8 @@ async def main() -> None:
                 "url": f"http://127.0.0.1:{server.server_address[1]}/image"}}, "wait": 30})
             if status != 200 or not cached.get("cached"):
                 failures.append("inline/get did not share result cache")
+            elif cached.get("agent_context") is None:
+                failures.append("inline/get cache hit lost agent_context")
         finally:
             server.shutdown()
 

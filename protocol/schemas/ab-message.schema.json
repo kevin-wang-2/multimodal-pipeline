@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:1:ab-message",
+  "$id": "urn:mmp:protocol:2:ab-message",
   "title": "AbMessage",
   "description": "A↔B 消息（架构.md §4）。一条 ws 连接，四类消息，统一信封 {type, protocol_version, ts, payload}。A/B 绑定时同样的信封走进程内调用。根 schema 即信封。",
   "type": "object",
   "properties": {
     "type": { "type": "string", "enum": ["register", "heartbeat", "request", "response"] },
-    "protocol_version": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/ProtocolVersion" },
+    "protocol_version": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/ProtocolVersion" },
     "ts": { "type": "string", "format": "date-time" },
     "payload": { "type": "object" }
   },
@@ -31,7 +31,7 @@
       "description": "A→B。连接建立后的第一条消息；重连后必须重发，B 用 node_id 覆盖旧表项。B 校验失败直接关连接（见 CloseCode），不回消息。",
       "type": "object",
       "properties": {
-        "node_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/NodeId" },
+        "node_id": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/NodeId" },
         "node_key": {
           "description": "静态节点密钥，配置下发。",
           "type": "string",
@@ -39,7 +39,7 @@
         },
         "capabilities": {
           "type": "array",
-          "items": { "$ref": "urn:mmp:protocol:1:capability" },
+          "items": { "$ref": "urn:mmp:protocol:2:capability" },
           "minItems": 1
         },
         "engine_versions": {
@@ -56,7 +56,7 @@
       "description": "A→B，每 10s 一次；B 连续 3 次未收到视为断线。",
       "type": "object",
       "properties": {
-        "node_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/NodeId" },
+        "node_id": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/NodeId" },
         "queue_len": {
           "description": "排队中（未开始）的任务数，含所有优先级。",
           "type": "integer",
@@ -84,9 +84,9 @@
       "properties": {
         "req_id": { "$ref": "#/$defs/ReqId" },
         "op": { "type": "string", "enum": ["submit", "get", "cancel"] },
-        "job": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/JobRequest" },
-        "job_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/JobId" },
-        "wait": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Wait" }
+        "job": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/JobRequest" },
+        "job_id": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/JobId" },
+        "wait": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/Wait" }
       },
       "required": ["req_id", "op"],
       "additionalProperties": false,
@@ -110,7 +110,7 @@
       "properties": {
         "req_id": { "$ref": "#/$defs/ReqId" },
         "http_status": { "type": "integer", "minimum": 200, "maximum": 599 },
-        "body": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/AnyResponse" }
+        "body": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/AnyResponse" }
       },
       "required": ["req_id", "http_status", "body"],
       "additionalProperties": false

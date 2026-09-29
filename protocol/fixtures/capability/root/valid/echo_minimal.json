@@ -1,6 +1,5 @@
 {
   "id": "echo",
-  "modal": "audio",
   "description": "S1 用：原样返回媒体 hash 与 params。",
   "tiers": [
     {
@@ -11,9 +10,18 @@
     }
   ],
   "input": {
-    "media": "required"
+    "media": {
+      "presence": "required",
+      "accepts": [
+        "*/*"
+      ]
+    }
   },
-  "output_schema": {
-    "type": "object"
+  "purpose": "diagnostic",
+  "output": {
+    "schema": {
+      "type": "object"
+    },
+    "agent_context": "none"
   }
 }

@@ -1,15 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:1:capability",
+  "$id": "urn:mmp:protocol:2:capability",
   "title": "Capability",
   "description": "任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，register 时整表上报；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。",
   "type": "object",
   "properties": {
     "id": { "$ref": "#/$defs/TaskTypeId" },
-    "modal": {
-      "description": "该任务类型消费的媒体模态。",
+    "purpose": {
+      "description": "稳定的能力意图；客户端用 purpose + Content-Type 发现任务，不依赖任务 id 或封闭模态枚举。",
       "type": "string",
-      "enum": ["audio", "image", "video", "document"]
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "maxLength": 64
     },
     "description": {
       "description": "给上层 agent 看的一句话说明；agent 按能力名从 /capabilities 按需拉取。",
@@ -43,9 +44,26 @@
       "type": "object",
       "properties": {
         "media": {
-          "description": "是否需要媒体句柄。",
-          "type": "string",
-          "enum": ["required", "optional", "none"]
+          "description": "媒体输入声明。accepts 是开放的 MIME 匹配器，可用 audio/* 或 */*，同一能力可接受多种媒体。",
+          "type": "object",
+          "properties": {
+            "presence": { "type": "string", "enum": ["required", "optional", "none"] },
+            "accepts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(\\*/\\*|[a-z0-9!#$&^_.+-]+/(\\*|[a-z0-9!#$&^_.+-]+))$"
+              },
+              "uniqueItems": true
+            },
+            "preprocessor": {
+              "description": "A 侧可选预处理器 id；调用方不应解释此字段。",
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+            }
+          },
+          "required": ["presence", "accepts"],
+          "additionalProperties": false
         },
         "params_schema": {
           "description": "params 的 JSON Schema（内联）。省略表示不接受任何 params。",
@@ -55,15 +73,27 @@
       "required": ["media"],
       "additionalProperties": false
     },
-    "output_schema": {
-      "description": "结果的 schema：本协议内 schema 的 $id（如 urn:mmp:protocol:1:digest），或内联的 JSON Schema。",
-      "oneOf": [
-        { "type": "string", "pattern": "^urn:mmp:protocol:[0-9]+:[a-z0-9-]+(#.*)?$" },
-        { "type": "object" }
-      ]
+    "output": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "description": "结果的 schema：本协议内 schema 的 $id，或内联 JSON Schema。",
+          "oneOf": [
+            { "type": "string", "pattern": "^urn:mmp:protocol:[0-9]+:[a-z0-9-]+(#.*)?$" },
+            { "type": "object" }
+          ]
+        },
+        "agent_context": {
+          "description": "该任务是否生成可直接交给基础模型的通用 agent context。",
+          "type": "string",
+          "enum": ["required", "optional", "none"]
+        }
+      },
+      "required": ["schema", "agent_context"],
+      "additionalProperties": false
     }
   },
-  "required": ["id", "modal", "tiers", "input", "output_schema"],
+  "required": ["id", "purpose", "tiers", "input", "output"],
   "additionalProperties": false,
   "$defs": {
     "TaskTypeId": {

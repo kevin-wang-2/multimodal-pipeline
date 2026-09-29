@@ -1,5 +1,5 @@
 /**
- * protocol/schemas/*.schema.json → src/types.ts。$ref 用的是 urn:mmp:protocol:1:<name>，这里给 ref-parser 一个 urn 解析器。
+ * protocol/schemas/*.schema.json → src/types.ts。$ref 用的是 urn:mmp:protocol:2:<name>，这里给 ref-parser 一个 urn 解析器。
  * 改了 schema 就重跑 `pnpm gen-types` 并提交生成物；CI 会比对生成物是否过期。
  */
 import { compile } from "json-schema-to-typescript";
@@ -30,7 +30,7 @@ const urnResolver = {
 };
 
 // 合成一个根，把六个 schema 的根与 job-api 的 $defs 都挂上去，一次 compile：每个类型只输出一份
-const root: any = { $id: "urn:mmp:protocol:1:all", title: "Protocol", type: "object", additionalProperties: false, properties: {} };
+const root: any = { $id: "urn:mmp:protocol:2:all", title: "Protocol", type: "object", additionalProperties: false, properties: {} };
 for (const [id, s] of byId) {
   const name = id.split(":").pop()!;
   if (s.type || s.oneOf || s.anyOf) root.properties[name] = { $ref: id };

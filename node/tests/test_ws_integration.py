@@ -21,13 +21,16 @@ import httpx
 import pytest
 
 from conftest import NODE_DIR, V_ANY, assert_valid, blob, inline, make_config
+from mmp_node.engine_io import EngineResult
 from mmp_node.config import BrokerEndpoint
 from mmp_node.node import Node
 from mmp_node.ws_client import WsLink
 
 CLI = NODE_DIR.parent / "ts" / "packages" / "broker" / "dist" / "cli.js"
+OPENCLAW_SMOKE = Path(__file__).with_name("openclaw_host_smoke.mjs")
 NODE_BIN = shutil.which("node")
 KEY = "integration-node-key-0123456789"
+sys.path.insert(0, str(NODE_DIR))
 
 pytestmark = pytest.mark.skipif(NODE_BIN is None or not CLI.exists(), reason="需要 node 与已构建的 ts/packages/broker（pnpm -r build）")
 
@@ -154,6 +157,45 @@ async def test_echo_over_ws_unplug_and_restart(tmp_path):
         await node.close()
 
 
+async def test_openclaw_host_discovers_image_triage_and_injects_context(tmp_path):
+    """MMP 自有宿主端到端：OpenClaw 适配 → B-ts HTTP/ws → A → 任务 presenter。"""
+    from engines.triage_image.digest import RawRegion, build_digest
+
+    port = free_port()
+    broker = BrokerProc(port, tmp_path)
+    cfg = make_config(tmp_path, engines={"triage_image": {"module": "engines.triage_image", "timeout_sec": 5}},
+                      broker__enabled=False, scheduler__vram_total_mb=1024)
+    cfg.brokers = [endpoint(port)]
+    node = Node(cfg, NODE_DIR)
+
+    async def fake_run(_spec, job, _timeout, _vram):
+        surfaces = [{"id": "image_0", "kind": "image", "index": 0, "width_px": 64,
+                     "height_px": 48, "rotation_deg": 0}]
+        digest, _ = build_digest(job["media_id"], "image/png", surfaces, ["A person holds a contract."],
+                                 [RawRegion("image_0", "contract", [4, 5, 40, 30], "phrase_grounding")],
+                                 0, .8, {"caption": 1})
+        return EngineResult(digest, {"caption": 1})
+
+    node.pool.run = fake_run
+    await node.start()
+    link = WsLink(node, cfg.brokers[0])
+    try:
+        await broker.start()
+        link.start()
+        await broker.wait_nodes(1)
+        proc = await asyncio.create_subprocess_exec(
+            NODE_BIN, str(OPENCLAW_SMOKE), f"http://127.0.0.1:{port}",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), 20)
+        assert proc.returncode == 0, stderr.decode(errors="replace")
+        assert b'"mediaId":"sha256:' in stdout
+    finally:
+        broker.stop()
+        await link.close()
+        await node.close()
+
+
 async def test_bad_key_is_fatal_and_not_retried(tmp_path):
     port = free_port()
     b = BrokerProc(port, tmp_path)
@@ -223,16 +265,17 @@ async def test_broker_rejects_non_register_first_frame(tmp_path):
     await b.start()
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws", proxy=None) as ws:
-            await ws.send(json.dumps({"type": "heartbeat", "protocol_version": "1.1", "ts": "2026-09-21T00:00:00Z",
+            await ws.send(json.dumps({"type": "heartbeat", "protocol_version": "2.0", "ts": "2026-09-21T00:00:00Z",
                                       "payload": {"node_id": "x", "queue_len": 0, "running": 0, "engines_loaded": []}}))
             with pytest.raises(websockets.exceptions.ConnectionClosed) as e:
                 await ws.recv()
             assert e.value.rcvd.code == 4003
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws", proxy=None) as ws:
-            await ws.send(json.dumps({"type": "register", "protocol_version": "2.0", "ts": "2026-09-21T00:00:00Z",
-                                      "payload": {"node_id": "x", "node_key": KEY, "capabilities": [{"id": "echo", "modal": "audio",
+            await ws.send(json.dumps({"type": "register", "protocol_version": "3.0", "ts": "2026-09-21T00:00:00Z",
+                                      "payload": {"node_id": "x", "node_key": KEY, "capabilities": [{"id": "echo", "purpose": "diagnostic",
                                                   "tiers": [{"tier": "cpu", "engine": "e", "engine_version": "1", "cost": "low"}],
-                                                  "input": {"media": "required"}, "output_schema": {"type": "object"}}], "engine_versions": {}}}))
+                                                  "input": {"media": {"presence": "required", "accepts": ["*/*"]}},
+                                                  "output": {"schema": {"type": "object"}, "agent_context": "none"}}], "engine_versions": {}}}))
             with pytest.raises(websockets.exceptions.ConnectionClosed) as e:
                 await ws.recv()
             assert e.value.rcvd.code == 4002

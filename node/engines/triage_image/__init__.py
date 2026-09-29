@@ -1,5 +1,7 @@
 """triage.image：Florence-2 全图描述、短语定位和对象检测。"""
 
+from .presentation import render_agent_context
+
 ENGINE = "florence-2-base-ft"
 ENGINE_VERSION = "transformers-4.57.6/2026-09-29"
 LARGE_ENGINE = "florence-2-large-ft"
@@ -16,12 +18,15 @@ PARAMS_SCHEMA = {
 
 CAPABILITIES = [{
     "id": "triage.image",
-    "modal": "image",
+    "purpose": "triage",
     "description": "图片预检：全图详细描述、描述短语定位与对象检测，输出带像素锚点的任务无关视觉索引。",
     "tiers": [{
         "tier": "gpu-fast", "engine": ENGINE, "engine_version": ENGINE_VERSION, "cost": "low",
         "latency_hint": "~0.4-0.8s/surface warm", "vram_mb": 768, "max_concurrency": 1,
     }],
-    "input": {"media": "required", "params_schema": PARAMS_SCHEMA},
-    "output_schema": "urn:mmp:protocol:1:digest",
+    "input": {"media": {"presence": "required", "accepts": ["image/*", "application/pdf"]},
+              "params_schema": PARAMS_SCHEMA},
+    "output": {"schema": "urn:mmp:protocol:2:digest", "agent_context": "required"},
 }]
+
+AGENT_CONTEXT_PRESENTERS = {"triage.image": render_agent_context}

@@ -7,7 +7,7 @@ test("validators resolve urn refs", () => {
   assert.equal(v({ type: "echo", media: { ref: "sha256:" + "a".repeat(64) } }), true);
   assert.equal(v({ type: "echo", media: { path: "/x" } }), false);
   assert.ok(errorsOf(v).length > 0);
-  assert.equal(validator(ID.abMessage)({ type: "heartbeat", protocol_version: "1.2", ts: "2026-09-21T00:00:00Z",
+  assert.equal(validator(ID.abMessage)({ type: "heartbeat", protocol_version: "2.0", ts: "2026-09-21T00:00:00Z",
     payload: { node_id: "n", queue_len: 0, running: 0, engines_loaded: [] } }), true);
 });
 

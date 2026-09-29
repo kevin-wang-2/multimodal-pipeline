@@ -1,0 +1,19 @@
+{
+  "job_id": "mac-m1-01J7ZQ9K3W8B6Q4M2N1P5R7S9T",
+  "type": "triage.audio",
+  "status": "done",
+  "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+  "cached": false,
+  "source": {
+    "tier": "cpu",
+    "engine": "test",
+    "engine_version": "1",
+    "generated_at": "2026-09-29T00:00:00Z",
+    "degraded": false
+  },
+  "result": {},
+  "agent_context": {
+    "content_type": "text/plain; charset=utf-8",
+    "text": "missing format"
+  }
+}

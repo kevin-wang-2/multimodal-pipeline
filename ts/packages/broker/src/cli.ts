@@ -20,7 +20,7 @@ function loadConfig(path: string | undefined): BrokerServerConfig {
   return {
     host: raw.host ?? "0.0.0.0", port: raw.port ?? 8766, wsPath: raw.ws_path ?? "/ws",
     nodeKey: String(raw.node_key), apiKey: raw.api_key ? String(raw.api_key) : undefined,
-    protocolVersion: raw.protocol_version, inflightGraceSec: raw.inflight_grace_sec,
+    inflightGraceSec: raw.inflight_grace_sec,
     heartbeatIntervalSec: raw.heartbeat_interval_sec, missedHeartbeats: raw.missed_heartbeats,
     registerTimeoutSec: raw.register_timeout_sec,
   };

@@ -1,7 +1,7 @@
-// 用打包后的 @mmp/client 打一个真实的 B：echo → triage.audio（inline）→ 同一媒体用 ref 重提 → 渲染注入块。
+// 用打包后的 @mmp/client 打一个真实的 B：发现 triage 能力 → inline → ref 重提 → 透传 agent_context。
 // 用法：MMP_BASE_URL=https://mmp.example MMP_API_KEY=… node examples/hub-smoke.mjs [wav]
 import { readFileSync } from "node:fs";
-import { MmpClient, MmpError, media, renderDigest, renderUnavailable } from "../dist/index.js";
+import { MmpClient, MmpError, media } from "../dist/index.js";
 
 const c = new MmpClient({ baseUrl: process.env.MMP_BASE_URL, apiKey: process.env.MMP_API_KEY });
 const wav = process.argv[2] ?? new URL("../../../../testdata/m0_hum_then_speech.wav", import.meta.url).pathname;
@@ -18,18 +18,19 @@ try {
   console.log(`echo: ${e.status} cached=${e.cached} ${t(Date.now() - t0)}`);
 
   t0 = Date.now();
-  const d1 = await c.run({ type: "triage.audio", media: media.inline(readFileSync(wav), "audio/wav") }, { pollWaitSec: 60 });
-  console.log(`triage.audio (inline): cached=${d1.cached} fetch=${d1.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
+  const capability = await c.resolveCapability({ purpose: "triage", contentType: "audio/wav" });
+  const d1 = await c.run({ type: capability.id, media: media.inline(readFileSync(wav), "audio/wav") }, { pollWaitSec: 60 });
+  console.log(`${capability.id} (inline): cached=${d1.cached} fetch=${d1.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
 
   t0 = Date.now();
-  const d2 = await c.run({ type: "triage.audio", media: media.ref(d1.media_id), params: { label_confidence_threshold: 0.35 } }, { pollWaitSec: 60 });
-  console.log(`triage.audio (ref, new params): cached=${d2.cached} fetch=${d2.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
+  const d2 = await c.run({ type: capability.id, media: media.ref(d1.media_id), params: { label_confidence_threshold: 0.35 } }, { pollWaitSec: 60 });
+  console.log(`${capability.id} (ref, new params): cached=${d2.cached} fetch=${d2.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
 
-  console.log("\n" + renderDigest(d1.result));
+  console.log("\n" + d1.agent_context?.text);
 } catch (err) {
   if (err instanceof MmpError) {
     console.log(`MmpError ${err.code} (HTTP ${err.status ?? "-"}) retryable=${err.retryable} fallback=${err.shouldFallback}`);
-    if (err.shouldFallback) console.log("\n" + renderUnavailable(err.code, "（这里放平台自己的转写）"));
+    if (err.shouldFallback) console.log(`\n[mmp:agent-context unavailable]\n${err.code}\n[mmp:agent-context end]`);
     process.exitCode = 1;
   } else {
     throw err;

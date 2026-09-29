@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:1:engine-io",
+  "$id": "urn:mmp:protocol:2:engine-io",
   "title": "EngineIo",
   "description": "A 与引擎子进程之间的 JSON-lines 协议（实施计划 §4.2）。每行一个对象，以 type 区分。A 内部使用，不暴露给 B / C；引擎只依赖标准库即可实现。媒体以本机临时文件路径传给引擎——这是进程内的实现细节，不是媒体句柄契约的一部分。",
   "type": "object",
@@ -26,7 +26,7 @@
         "type": { "const": "hello" },
         "engine": { "type": "string", "minLength": 1 },
         "engine_version": { "type": "string", "minLength": 1 },
-        "protocol_version": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/ProtocolVersion" }
+        "protocol_version": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/ProtocolVersion" }
       },
       "required": ["type", "engine", "engine_version", "protocol_version"],
       "additionalProperties": false
@@ -40,10 +40,10 @@
         "job": {
           "type": "object",
           "properties": {
-            "job_id": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/JobId" },
-            "task_type": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
-            "tier": { "$ref": "urn:mmp:protocol:1:capability#/$defs/Tier" },
-            "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+            "job_id": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/JobId" },
+            "task_type": { "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId" },
+            "tier": { "$ref": "urn:mmp:protocol:2:capability#/$defs/Tier" },
+            "media_id": { "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId" },
             "media_path": { "description": "本机文件路径；input.media=none 的类型省略。", "type": "string", "minLength": 1 },
             "params": { "type": "object" },
             "internal": { "type": "object" },
@@ -71,7 +71,7 @@
       "additionalProperties": false
     },
     "Result": {
-      "description": "引擎→A。result 是该任务类型 output_schema 的实例（digest 由引擎组装，A 只补 source）。",
+      "description": "引擎→A。result 是该任务类型 output.schema 的实例（digest 由引擎组装，A 只补 source）。",
       "type": "object",
       "properties": {
         "type": { "const": "result" },

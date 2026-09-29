@@ -21,14 +21,14 @@ B-py 从只绑 127.0.0.1 改为绑内网地址 + `api_key`；GPU 机在 NAT 后�
 
 ```
 入站语音 ──OpenClaw 媒体理解──▶ mmp-triage {{AttachmentPath}} ──@mmp/client──▶ B-py（内网）──▶ A triage.audio
-                                    │ exit 0：stdout = renderDigest(digest) → [Audio]/[Video] 块
+                                    │ exit 0：stdout = JobDone.agent_context.text → 媒体块
                                     └ exit 2：回落到下一个条目（平台 STT，只接 audio）
                                                     │ 平台 STT 也失败 → prompt 里没有块，只剩附件引用
-                     before_prompt_build 钩子：有 [Audio]/[Video] 块但无 [mmp:digest start] → "⚠ 预检不可用：转写来自平台兜底…"
+                     before_prompt_build 钩子：有媒体块但无 [mmp:agent-context start] → "⚠ 预检不可用…"
                                                   没有块、只有附件引用（media://inbound/… 或音频文件名） → "⚠ 预检不可用，平台转写也没有产出…"
 ```
 
-三条路径的取舍（2026-09-21 联调后定）：CLI 失败**必须 exit 2**，否则平台 STT 条目永远轮不到、等于没有兜底；"降级显式"完全交给钩子，钩子按 prompt 里剩下什么来区分两级降级。曾试过 CLI 在服务不可用时 exit 0 并输出 `[mmp:digest unavailable]` 块——降级是显式了，但兜底被短路，否决。
+三条路径的取舍（2026-09-21 联调后定）：CLI 失败**必须 exit 2**，否则平台兜底条目永远轮不到；"降级显式"交给钩子。
 
 - **不需要**插件自己"收消息 → 提交 → 等结果 → 注入"，也**不需要**关掉平台转写——它就是兜底。实施计划 S3 原文的三条（`message_received` 提交、`before_prompt_build` 注入、关平台转写）由此改为：CLI 条目 + 一行降级标注 + 平台转写保留作回落。
 - **多轮追问不重复推理**：OpenClaw 原生保证（附件只理解一次）。块里印着 `media=sha256:…`，M2 的能力调用直接 `ref`。

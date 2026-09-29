@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:1:digest",
+  "$id": "urn:mmp:protocol:2:digest",
   "title": "Digest",
   "description": "自动预检产出的任务无关结构化摘要。audio 用时间段锚定事实；image 用 surface + bbox 锚定视觉索引。gaps 始终显式声明未覆盖信息。",
   "oneOf": [
@@ -73,7 +73,7 @@
     "AudioDigest": {
       "type": "object",
       "properties": {
-        "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+        "media_id": { "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId" },
         "kind": { "const": "audio" },
         "duration_sec": { "type": "number", "minimum": 0 },
         "timeline_unit": {
@@ -96,7 +96,7 @@
         "tools": { "$ref": "#/$defs/Tools" },
         "gaps": { "$ref": "#/$defs/Gaps" },
         "capabilities_available": { "$ref": "#/$defs/CapabilitiesAvailable" },
-        "source": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Source" },
+        "source": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/Source" },
         "timings_ms": { "$ref": "#/$defs/Timings" }
       },
       "required": ["media_id", "kind", "duration_sec", "timeline_unit", "segments", "tools", "gaps", "capabilities_available", "source"],
@@ -187,7 +187,7 @@
     "ImageDigest": {
       "type": "object",
       "properties": {
-        "media_id": { "$ref": "urn:mmp:protocol:1:media-handle#/$defs/MediaId" },
+        "media_id": { "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId" },
         "kind": { "const": "image" },
         "format": {
           "description": "输入媒体格式或容器 MIME，例如 image/jpeg、image/png、application/pdf。",
@@ -212,7 +212,7 @@
         "tools": { "$ref": "#/$defs/Tools" },
         "gaps": { "$ref": "#/$defs/Gaps" },
         "capabilities_available": { "$ref": "#/$defs/CapabilitiesAvailable" },
-        "source": { "$ref": "urn:mmp:protocol:1:job-api#/$defs/Source" },
+        "source": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/Source" },
         "timings_ms": { "$ref": "#/$defs/Timings" }
       },
       "required": ["media_id", "kind", "format", "surfaces", "regions", "quality_signals", "tools", "gaps", "capabilities_available", "source"],
@@ -233,7 +233,7 @@
     "CapabilitiesAvailable": {
       "description": "任务无关的能力清单：这份媒体上能执行什么。项为任务类型 id，不代表 MMP 建议调用。",
       "type": "array",
-      "items": { "$ref": "urn:mmp:protocol:1:capability#/$defs/TaskTypeId" },
+      "items": { "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId" },
       "uniqueItems": true
     },
     "Timings": {

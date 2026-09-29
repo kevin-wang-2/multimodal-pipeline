@@ -105,12 +105,13 @@ export type JobDone = {
   cached: boolean;
   source: Source;
   /**
-   * 该任务类型 output_schema 的实例；预检类型即 digest。
+   * 该任务类型 output.schema 的实例；预检类型即 digest。
    */
   result?: {
     [k: string]: unknown;
   };
   result_ref?: ResultRef;
+  agent_context?: AgentContext;
   timings_ms?: {
     [k: string]: number;
   };
@@ -137,7 +138,7 @@ export type EngineIo = {
   [k: string]: unknown;
 } & (Hello | Run | Cancel | Shutdown | Result | Error | Log);
 /**
- * 引擎→A。result 是该任务类型 output_schema 的实例（digest 由引擎组装，A 只补 source）。
+ * 引擎→A。result 是该任务类型 output.schema 的实例（digest 由引擎组装，A 只补 source）。
  */
 export type Result = {
   type: "result";
@@ -250,6 +251,7 @@ export interface Protocol {
   "job-api__JobRequest"?: JobRequest;
   "job-api__Source"?: Source;
   "job-api__ResultRef"?: ResultRef;
+  "job-api__AgentContext"?: AgentContext;
   "job-api__JobDone"?: JobDone;
   "job-api__JobPending"?: JobPending;
   "job-api__JobFailed"?: JobFailed;
@@ -308,9 +310,9 @@ export interface Capability {
    */
   id: string;
   /**
-   * 该任务类型消费的媒体模态。
+   * 稳定的能力意图；客户端用 purpose + Content-Type 发现任务，不依赖任务 id 或封闭模态枚举。
    */
-  modal: "audio" | "image" | "video" | "document";
+  purpose: string;
   /**
    * 给上层 agent 看的一句话说明；agent 按能力名从 /capabilities 按需拉取。
    */
@@ -333,9 +335,16 @@ export interface Capability {
   tiers: [TierSpec, ...TierSpec[]];
   input: {
     /**
-     * 是否需要媒体句柄。
+     * 媒体输入声明。accepts 是开放的 MIME 匹配器，可用 audio/* 或 * /*，同一能力可接受多种媒体。
      */
-    media: "required" | "optional" | "none";
+    media: {
+      presence: "required" | "optional" | "none";
+      accepts: string[];
+      /**
+       * A 侧可选预处理器 id；调用方不应解释此字段。
+       */
+      preprocessor?: string;
+    };
     /**
      * params 的 JSON Schema（内联）。省略表示不接受任何 params。
      */
@@ -343,14 +352,20 @@ export interface Capability {
       [k: string]: unknown;
     };
   };
-  /**
-   * 结果的 schema：本协议内 schema 的 $id（如 urn:mmp:protocol:1:digest），或内联的 JSON Schema。
-   */
-  output_schema:
-    | string
-    | {
-        [k: string]: unknown;
-      };
+  output: {
+    /**
+     * 结果的 schema：本协议内 schema 的 $id，或内联 JSON Schema。
+     */
+    schema:
+      | string
+      | {
+          [k: string]: unknown;
+        };
+    /**
+     * 该任务是否生成可直接交给基础模型的通用 agent context。
+     */
+    agent_context: "required" | "optional" | "none";
+  };
 }
 export interface TierSpec {
   /**
@@ -485,6 +500,14 @@ export interface ResultRef {
   content_type: string;
   bytes: number;
   sha256: string;
+}
+/**
+ * 由任务实现确定性生成、可直接交给基础模型的上下文；客户端只透传，不解析其中的模态语义。
+ */
+export interface AgentContext {
+  format: "mmp-agent-context-v1";
+  content_type: "text/plain; charset=utf-8";
+  text: string;
 }
 /**
  * 202：排队中或运行中。

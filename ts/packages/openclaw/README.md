@@ -2,8 +2,8 @@
 
 OpenClaw 宿主的适配层。两件东西：
 
-1. **`mmp-triage` CLI**——作为 `tools.media.models[]` 的 `cli` 条目。OpenClaw 对每个入站音频调用它（`{{AttachmentPath}}`），stdout 就是用户消息里 `[Audio]` 块的"转写"——实际是带时间轴、缺口、可用能力的注入块。失败时 exit 2，OpenClaw 自动回落到下一个条目（平台自己的 STT）。
-2. **插件 `mmp`**——一个 `before_prompt_build` 钩子，无状态、不碰媒体：prompt 里有 `[Audio]`/`[Video]` 块但没有我们的边界标记（走了平台兜底）→ 前置"⚠ 本次多模态预检不可用：转写来自平台兜底…"；连块都没有、只剩附件引用（两级都失败）→ 前置"⚠ …平台转写也没有产出…"。
+1. **`mmp-triage` CLI**——作为 `tools.media.models[]` 的 `cli` 条目。它用附件 MIME 和 `purpose=triage` 查询 `/capabilities`，提交匹配的任务，再把 `JobDone.agent_context.text` 原样写到 stdout。音频、视频、图片和 PDF 走同一条路径，适配层不硬编码任务 id。
+2. **插件 `mmp`**——一个 `before_prompt_build` 钩子，无状态、不碰媒体：prompt 里有媒体块但没有 `[mmp:agent-context start]` 边界时，显式标注走了平台兜底。
 
 为什么不在插件里自己"收消息 → 提交 → 注入"：`before_prompt_build` 事件里没有媒体，媒体只在 `message_received` 里；而 OpenClaw 的媒体理解层本来就负责"每个附件跑一次、结果进 prompt、失败回落、多轮不重跑"。借它的机制比自己再实现一套可靠。
 
@@ -33,9 +33,7 @@ openclaw plugins install npm:@mmp/openclaw
   tools: {
     media: {
       models: [
-        // capabilities 写 audio + video：OpenClaw 按魔数分类，ftyp 主 brand 不是 M4A 的 mp4 容器（如 macOS Safari MediaRecorder 的 iso5）会被判成 video/mp4；
-        // 那种文件只有 cli 条目能接（平台 STT 接不了 video），发送端最好把主 brand 改成 "M4A "（见 docs/宿主接入-OpenClaw.md）
-        { type: "cli", command: "mmp-triage", args: ["{{AttachmentPath}}"], capabilities: ["audio", "video"], timeoutSeconds: 60, maxBytes: 8388608 },
+        { type: "cli", command: "mmp-triage", args: ["{{AttachmentPath}}"], capabilities: ["audio", "video", "image"], timeoutSeconds: 60, maxBytes: 8388608 },
         // 平台 STT 条目放在后面作兜底。只能是 audio：OpenClaw 里 video 只有 google 提供者能接，openai 声明 video 也不会被调用
         { provider: "openai", model: "gpt-4o-mini-transcribe", capabilities: ["audio"] },
       ],

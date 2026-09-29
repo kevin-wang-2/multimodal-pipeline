@@ -14,7 +14,7 @@ from .core import Broker
 
 def create_app(broker: Broker, api_key: str = "") -> FastAPI:
     app = FastAPI(title="mmp broker", version="1.0", docs_url=None, redoc_url=None)
-    validate = schemas.validator_for_ref("urn:mmp:protocol:1:job-api#/$defs/JobRequest")
+    validate = schemas.validator_for_ref("urn:mmp:protocol:2:job-api#/$defs/JobRequest")
 
     def respond(status_body: tuple[int, dict]) -> JSONResponse:
         status, body = status_body

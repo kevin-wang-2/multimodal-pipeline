@@ -1,4 +1,4 @@
-import { MmpClient, MmpError, media, renderDigest, type Digest } from "@mmp/client";
+import { MmpClient, MmpError, media } from "@mmp/client";
 import type { MmpHostConfig } from "./config.js";
 
 export interface TriageOutcome {
@@ -13,11 +13,14 @@ export async function triageBytes(client: MmpClient, bytes: Uint8Array, contentT
   if (bytes.byteLength > (cfg.maxInlineBytes ?? 8 * 1024 * 1024)) {
     throw new MmpError("media_too_large", `attachment is ${bytes.byteLength} bytes > inline limit; no public URL available from this host`);
   }
+  if (!contentType) throw new MmpError("unsupported_type", "attachment Content-Type is unknown");
+  const capability = await client.resolveCapability({ purpose: "triage", contentType });
   const done = await client.run(
-    { type: "triage.audio", media: media.inline(bytes, contentType), priority: "interactive" },
+    { type: capability.id, media: media.inline(bytes, contentType), priority: "interactive" },
     { pollWaitSec: Math.min(120, cfg.waitSec ?? 50), timeoutMs: ((cfg.waitSec ?? 50) + 10) * 1000 },
   );
-  return { text: renderDigest(done.result as unknown as Digest), mediaId: done.media_id, cached: done.cached };
+  if (!done.agent_context) throw new MmpError("unexpected", `${capability.id} completed without agent_context`, { jobId: done.job_id, body: done });
+  return { text: done.agent_context.text, mediaId: done.media_id, cached: done.cached };
 }
 
 export function makeClient(cfg: MmpHostConfig, fetchImpl?: typeof fetch): MmpClient {

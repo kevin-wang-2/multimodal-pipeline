@@ -263,10 +263,13 @@ class Scheduler:
             if degraded_reason:
                 job.source["degraded_reason"] = degraded_reason
             result = self._finish_result(job, res.result)
+            job.agent_context = self._agent_context(job, result)
             await self._place_result(job, result)
+            cache_result = (result if self.registry.capability(job.task_type)["output"]["agent_context"] != "none"
+                            else job.result)
             self.cache.put(task_key(job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"], job.params),
                            job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                           job.source, job.result, job.result_ref, job.timings_ms)
+                           job.source, cache_result, job.result_ref, job.timings_ms)
             job.finish("done")
             self._durations[(job.tier["engine"], job.tier["tier"])] = (
                 0.7 * self._durations.get((job.tier["engine"], job.tier["tier"]), (time.monotonic() - t0)) + 0.3 * (time.monotonic() - t0))
@@ -293,10 +296,11 @@ class Scheduler:
                                  "timings_ms": job.timings_ms}, ensure_ascii=False))
 
     async def _normalize_media(self, job: Job):
-        """modal=audio 的任务：非 PCM WAV 先转 16k 单声道 WAV（ffmpeg），派生文件跟原媒体一起缓存。其他模态原样。"""
+        """声明 audio.to_wav_16k_mono 预处理的任务：非 PCM WAV 先归一化。"""
         if job.media_path is None or not self.cfg.media.transcode_audio:
             return job.media_path
-        if self.registry.capability(job.task_type).get("modal") != "audio" or not transcode.needs_transcode(job.media_path):
+        media = self.registry.capability(job.task_type)["input"]["media"]
+        if media.get("preprocessor") != "audio.to_wav_16k_mono" or not transcode.needs_transcode(job.media_path):
             return job.media_path
         dst = self.media.derived_path(job.media_id, "16k.wav")
         if dst.exists():
@@ -312,8 +316,8 @@ class Scheduler:
         return dst
 
     def _finish_result(self, job: Job, result: object) -> object:
-        """digest 类型：A 补 source、按 tools 判部分失败；所有类型：按 output_schema 校验，不合格算 engine_failed。"""
-        out_schema = self.registry.output_schema(job.task_type)
+        """digest 类型：A 补 source、按 tools 判部分失败；所有类型：按 output.schema 校验。"""
+        out_schema = self.registry.result_schema(job.task_type)
         if out_schema == schemas.DIGEST_ID and isinstance(result, dict):
             tools = result.get("tools") or {}
             if any(v in ("failed", "partial") for v in tools.values()) and not job.source["degraded"]:
@@ -324,8 +328,18 @@ class Scheduler:
         if v is not None:
             errs = schemas.errors(v, result)
             if errs:
-                raise ApiError("engine_failed", f"engine output violates {out_schema if isinstance(out_schema, str) else 'output_schema'}: " + "; ".join(errs[:3]))
+                raise ApiError("engine_failed", f"engine output violates {out_schema if isinstance(out_schema, str) else 'output.schema'}: " + "; ".join(errs[:3]))
         return result
+
+    def _agent_context(self, job: Job, result: object) -> dict | None:
+        context = self.registry.present_agent_context(job.task_type, result)
+        if context is None:
+            return None
+        v = schemas.validator_for_ref("urn:mmp:protocol:2:job-api#/$defs/AgentContext")
+        errs = schemas.errors(v, context)
+        if errs:
+            raise ApiError("engine_failed", "agent_context violates protocol: " + "; ".join(errs[:3]))
+        return context
 
     async def _place_result(self, job: Job, result: object) -> None:
         """结果内联；超限且有 put 端点则 PUT 过去只留引用。"""

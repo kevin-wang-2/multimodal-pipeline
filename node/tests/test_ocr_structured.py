@@ -18,7 +18,7 @@ PIL = pytest.importorskip("PIL.Image")
 
 
 def test_capability_is_valid_and_declares_vram():
-    v = validator("urn:mmp:protocol:1:capability")
+    v = validator("urn:mmp:protocol:2:capability")
     errs = list(v.iter_errors(CAPABILITIES[0]))
     assert not errs, [e.message for e in errs]
     tiers = {t["tier"]: t for t in CAPABILITIES[0]["tiers"]}
@@ -100,7 +100,7 @@ def test_load_pages_png_tiff_and_sniff(tmp_path):
     assert sniff(b"%PDF-1.7\n") == "pdf"
 
 
-def test_output_schema_accepts_engine_shape():
+def test_result_schema_accepts_engine_shape():
     v = validator.__globals__["Draft202012Validator"](OUTPUT_SCHEMA)
     ok = {"page_count": 2, "suggest_upgrade_pages": [2], "pages": [
         {"page": 1, "tier": "gpu-fast", "text": "x", "lines": [{"text": "x", "score": 0.9, "box": [[0, 0], [1, 0], [1, 1], [0, 1]]}],

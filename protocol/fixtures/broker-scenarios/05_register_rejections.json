@@ -7,7 +7,7 @@
     {
       "register": {
         "type": "register",
-        "protocol_version": "1.1",
+        "protocol_version": "2.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-a",
@@ -15,7 +15,6 @@
           "capabilities": [
             {
               "id": "echo",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "cpu",
@@ -25,10 +24,19 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "diagnostic",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
               }
             }
           ],
@@ -42,7 +50,7 @@
     {
       "register": {
         "type": "register",
-        "protocol_version": "2.0",
+        "protocol_version": "3.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-a",
@@ -50,7 +58,6 @@
           "capabilities": [
             {
               "id": "echo",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "cpu",
@@ -60,10 +67,19 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "diagnostic",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
               }
             }
           ],
@@ -77,7 +93,7 @@
     {
       "register": {
         "type": "heartbeat",
-        "protocol_version": "1.1",
+        "protocol_version": "2.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-a",
@@ -91,7 +107,7 @@
     {
       "register": {
         "type": "register",
-        "protocol_version": "1.1",
+        "protocol_version": "2.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-a",
@@ -114,7 +130,7 @@
     {
       "register": {
         "type": "register",
-        "protocol_version": "1.0",
+        "protocol_version": "2.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-a",
@@ -122,7 +138,6 @@
           "capabilities": [
             {
               "id": "echo",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "cpu",
@@ -132,10 +147,19 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "diagnostic",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
               }
             }
           ],

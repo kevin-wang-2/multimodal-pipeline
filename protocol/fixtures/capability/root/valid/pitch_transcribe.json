@@ -1,6 +1,5 @@
 {
   "id": "pitch_transcribe",
-  "modal": "audio",
   "description": "对哼唱 / 歌唱段做音高转写，输出音符列表。",
   "consumes": {
     "labels": [
@@ -21,7 +20,12 @@
     }
   ],
   "input": {
-    "media": "required",
+    "media": {
+      "presence": "required",
+      "accepts": [
+        "*/*"
+      ]
+    },
     "params_schema": {
       "type": "object",
       "properties": {
@@ -38,12 +42,16 @@
       ]
     }
   },
-  "output_schema": {
-    "type": "object",
-    "properties": {
-      "notes": {
-        "type": "array"
+  "purpose": "diagnostic",
+  "output": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "notes": {
+          "type": "array"
+        }
       }
-    }
+    },
+    "agent_context": "none"
   }
 }

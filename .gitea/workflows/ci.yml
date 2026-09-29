@@ -204,14 +204,14 @@ jobs:
       - name: Build deployment archive
         run: |
           printf '%s\n' "$GITHUB_SHA" > REVISION
-          tar --exclude=.git --exclude=broker-release.tar.gz -czf broker-release.tar.gz .
+          tar --exclude=.git -czf /tmp/mmp-broker-release.tar.gz .
 
       - name: Deploy exact main SHA to B-ts broker
         run: |
           ssh_opts=(-i ~/.ssh/mmp-broker-deploy -o BatchMode=yes -o IdentitiesOnly=yes)
           remote="$BROKER_USER@$BROKER_HOST"
           archive="/tmp/mmp-broker-$GITHUB_SHA.tar.gz"
-          scp "${ssh_opts[@]}" broker-release.tar.gz "$remote:$archive"
+          scp "${ssh_opts[@]}" /tmp/mmp-broker-release.tar.gz "$remote:$archive"
           ssh "${ssh_opts[@]}" "$remote" \
             "bash -s -- '$GITHUB_SHA' '$archive' '$BROKER_ROOT' '$BROKER_CONFIG' '$BROKER_PM2_NAME' '$BROKER_HEALTH_URL'" \
             < tools/deploy/linux-broker.sh

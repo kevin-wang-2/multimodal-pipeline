@@ -1,5 +1,5 @@
 # 把 ts/packages/* 发到私有 registry https://mmp.seanartech.com/npm/（枢纽机 Verdaccio）。
-# 触发：手动，或推 tag `npm-v*`。版本号以各包 package.json 为准；同版本重复发布会被 registry 拒绝（E409），先 bump。
+# 触发：手动，或推 tag `npm-v*`。版本号以各包 package.json 为准；已存在的版本跳过，只发布新版本。
 # 认证：仓库 secret MMP_NPM_AUTH = base64("mmp-publisher:<密码>")。
 name: release-npm
 on:
@@ -34,6 +34,17 @@ jobs:
           test -n "$MMP_NPM_AUTH" || { echo "secret MMP_NPM_AUTH missing"; exit 1; }
           echo "//mmp.seanartech.com/npm/:_auth=$MMP_NPM_AUTH" >> ~/.npmrc
           for p in protocol broker client openclaw; do
-            (cd packages/$p && pnpm publish --no-git-checks) || exit 1
+            name=$(node -p "require('./packages/$p/package.json').name")
+            version=$(node -p "require('./packages/$p/package.json').version")
+            error_file=$(mktemp)
+            if npm view "$name@$version" version --registry=https://mmp.seanartech.com/npm/ >/dev/null 2>"$error_file"; then
+              echo "skip $name@$version: already published"
+            elif grep -q 'E404' "$error_file"; then
+              (cd "packages/$p" && pnpm publish --no-git-checks) || exit 1
+            else
+              cat "$error_file" >&2
+              exit 1
+            fi
+            rm -f "$error_file"
           done
         working-directory: ts

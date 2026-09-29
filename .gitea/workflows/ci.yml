@@ -1,5 +1,5 @@
 # 合并门禁：Linux 契约/单测 + Windows GPU 真模型冒烟。
-# main push 两项成功后，同一台 Windows runner 才部署 C:\mmp\repo 并健康检查。
+# main push 两项成功后，分别部署 Windows 算力节点和公网 B-ts broker。
 #
 # 本实例的 runner 访问不到 github.com，不用 actions/*；检出按本实例惯例手工 git fetch。
 # runner 镜像 docker.gitea.com/runner-images:ubuntu-latest 自带 Python 3.12、Node 24、git。
@@ -67,6 +67,9 @@ jobs:
       - name: Node acceptance (A + B-py echo, B-py scenarios, A ws client vs real B-ts)
         run: ../.venv/bin/python -m pytest -q
         working-directory: node
+
+      - name: Deployment scripts parse
+        run: bash -n tools/deploy/linux-broker.sh
 
   smoke:
     runs-on: windows
@@ -162,3 +165,53 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\tools\deploy\windows-node.ps1 -ExpectedSha "${{ github.sha }}" -RepositoryUrl "%GITHUB_SERVER_URL%/%GITHUB_REPOSITORY%.git" -Token "%TOKEN%"
+
+  deploy-broker:
+    needs: [unit, smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BROKER_HOST: ${{ secrets.MMP_BROKER_SSH_HOST }}
+      BROKER_USER: ${{ secrets.MMP_BROKER_SSH_USER }}
+      BROKER_ROOT: ${{ secrets.MMP_BROKER_ROOT }}
+      BROKER_CONFIG: ${{ secrets.MMP_BROKER_CONFIG }}
+      BROKER_PM2_NAME: ${{ secrets.MMP_BROKER_PM2_NAME }}
+      BROKER_HEALTH_URL: ${{ secrets.MMP_BROKER_HEALTH_URL }}
+    steps:
+      - name: Checkout exact main SHA
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -q .
+          git remote add origin ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git
+          git -c http.extraHeader="Authorization: token $TOKEN" fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q -f FETCH_HEAD
+
+      - name: Configure broker deploy SSH
+        env:
+          SSH_KEY: ${{ secrets.MMP_BROKER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.MMP_BROKER_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$BROKER_HOST" && test -n "$BROKER_USER" && test -n "$BROKER_ROOT"
+          test -n "$BROKER_CONFIG" && test -n "$BROKER_PM2_NAME" && test -n "$BROKER_HEALTH_URL"
+          test -n "$SSH_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/mmp-broker-deploy
+          chmod 600 ~/.ssh/mmp-broker-deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Build deployment archive
+        run: |
+          printf '%s\n' "$GITHUB_SHA" > REVISION
+          tar --exclude=.git --exclude=broker-release.tar.gz -czf broker-release.tar.gz .
+
+      - name: Deploy exact main SHA to B-ts broker
+        run: |
+          ssh_opts=(-i ~/.ssh/mmp-broker-deploy -o BatchMode=yes -o IdentitiesOnly=yes)
+          remote="$BROKER_USER@$BROKER_HOST"
+          archive="/tmp/mmp-broker-$GITHUB_SHA.tar.gz"
+          scp "${ssh_opts[@]}" broker-release.tar.gz "$remote:$archive"
+          ssh "${ssh_opts[@]}" "$remote" \
+            "bash -s -- '$GITHUB_SHA' '$archive' '$BROKER_ROOT' '$BROKER_CONFIG' '$BROKER_PM2_NAME' '$BROKER_HEALTH_URL'" \
+            < tools/deploy/linux-broker.sh

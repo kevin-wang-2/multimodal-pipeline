@@ -1,7 +1,7 @@
 {
   "media_id": "sha256:b1f22d21807b82947ba59a2f731d4106d305aaa5e30782357218357cfe6fa667",
   "kind": "image",
-  "format": "application/pdf",
+  "format": "image/tiff",
   "surfaces": [
     {
       "id": "page_0",
@@ -28,8 +28,8 @@
     "object_detection": "failed"
   },
   "gaps": [
-    "视觉描述失败，页面内容未知",
-    "页面中的文字内容未读取"
+    "视觉描述失败，多页图片内容未知",
+    "多页图片中的文字内容未读取"
   ],
   "capabilities_available": [
     "ocr.structured"

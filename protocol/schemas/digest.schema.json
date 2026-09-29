@@ -190,9 +190,9 @@
         "media_id": { "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId" },
         "kind": { "const": "image" },
         "format": {
-          "description": "输入媒体格式或容器 MIME，例如 image/jpeg、image/png、application/pdf。",
+          "description": "输入图片的 MIME，例如 image/jpeg、image/png、image/tiff。文档容器不属于图片 digest。",
           "type": "string",
-          "minLength": 1
+          "pattern": "^image/[^;\\s]+$"
         },
         "surfaces": {
           "type": "array",

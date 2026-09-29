@@ -686,7 +686,7 @@ export interface ImageDigest {
   media_id: string;
   kind: "image";
   /**
-   * 输入媒体格式或容器 MIME，例如 image/jpeg、image/png、application/pdf。
+   * 输入图片的 MIME，例如 image/jpeg、image/png、image/tiff。文档容器不属于图片 digest。
    */
   format: string;
   /**

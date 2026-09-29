@@ -7,12 +7,12 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from engines.common.io import BadParams, serve
-from engines.ocr_structured.pages import UnsupportedDocument, load_pages, sniff
+from engines.ocr_structured.pages import UnsupportedDocument, sniff
 from engines.triage_image import PARAMS_SCHEMA
 from engines.triage_image.digest import RawRegion, build_digest
 
 
-MIME = {"png": "image/png", "jpeg": "image/jpeg", "tiff": "image/tiff", "webp": "image/webp", "pdf": "application/pdf"}
+MIME = {"png": "image/png", "jpeg": "image/jpeg", "tiff": "image/tiff", "webp": "image/webp"}
 
 
 class Florence:
@@ -44,15 +44,11 @@ def _params(raw: dict) -> dict:
     return out
 
 
-def _surfaces(path: str, dpi: int):
+def _surfaces(path: str):
     with open(path, "rb") as f:
         kind = sniff(f.read(16))
     if kind == "pdf":
-        _, pages = load_pages(path, None, dpi)
-        if not pages:
-            raise UnsupportedDocument("PDF has no pages")
-        return kind, [(p.image, {"id": f"page_{p.index - 1}", "kind": "page", "index": p.index - 1,
-                                  "width_px": p.image.width, "height_px": p.image.height, "rotation_deg": 0}) for p in pages]
+        raise UnsupportedDocument("PDF is a document; triage.image accepts only images")
     source = Image.open(path)
     count = getattr(source, "n_frames", 1)
     items = []
@@ -70,7 +66,7 @@ def _surfaces(path: str, dpi: int):
 def analyze(model: Florence, job: dict) -> tuple[dict, str | None]:
     p = _params(job.get("params") or {})
     try:
-        kind, items = _surfaces(job["media_path"], p["pdf_dpi"])
+        kind, items = _surfaces(job["media_path"])
     except UnsupportedDocument as e:
         raise BadParams(f"unsupported media: {e}") from e
     captions, regions, timings = [], [], {"metadata": 0}

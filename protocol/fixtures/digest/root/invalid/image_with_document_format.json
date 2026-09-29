@@ -1,0 +1,37 @@
+{
+  "media_id": "sha256:b1f22d21807b82947ba59a2f731d4106d305aaa5e30782357218357cfe6fa667",
+  "kind": "image",
+  "format": "application/pdf",
+  "surfaces": [
+    {
+      "id": "page_0",
+      "kind": "page",
+      "index": 0,
+      "width_px": 2481,
+      "height_px": 1654,
+      "rotation_deg": 0
+    }
+  ],
+  "regions": [],
+  "quality_signals": [
+    {
+      "code": "description_nonempty",
+      "status": "failed",
+      "value": false
+    }
+  ],
+  "tools": {
+    "metadata": "ok",
+    "visual_caption": "failed"
+  },
+  "gaps": ["PDF 不能作为图片 digest"],
+  "capabilities_available": ["ocr.structured"],
+  "source": {
+    "tier": "gpu-fast",
+    "engine": "florence-2-base-ft",
+    "engine_version": "2026-09-29",
+    "generated_at": "2026-09-29T00:00:00+08:00",
+    "degraded": true,
+    "degraded_reason": "partial_failure"
+  }
+}

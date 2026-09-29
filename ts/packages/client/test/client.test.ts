@@ -91,11 +91,13 @@ test("run: 202 then polls until done; wait honours timeout and cancelled", async
 test("capability resolution is generic across media families and fails explicitly", () => {
   const response = { protocol_version: "2.0", capabilities: [
     { capability: { id: "triage.audio", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
-    { capability: { id: "triage.image", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*", "application/pdf"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
+    { capability: { id: "triage.image", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
   ] } as any;
   assert.equal(matchesMediaType("image/*", "Image/PNG; charset=binary"), true);
   assert.equal(resolveCapability(response, { purpose: "triage", contentType: "video/mp4" }).id, "triage.audio");
   assert.equal(resolveCapability(response, { purpose: "triage", contentType: "image/png" }).id, "triage.image");
+  assert.throws(() => resolveCapability(response, { purpose: "triage", contentType: "application/pdf" }),
+    (e: MmpError) => e.code === "unsupported_type");
   assert.throws(() => resolveCapability(response, { purpose: "triage", contentType: "model/gltf+json" }),
     (e: MmpError) => e.code === "unsupported_type");
 });

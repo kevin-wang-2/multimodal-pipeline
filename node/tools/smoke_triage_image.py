@@ -12,8 +12,6 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from PIL import Image
-
 NODE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(NODE))
 from mmp_broker.core import Broker  # noqa: E402
@@ -50,9 +48,6 @@ async def main() -> None:
     if len(images) < 4:
         raise RuntimeError(f"need four smoke images, found {images}")
     cache_tmp = tempfile.TemporaryDirectory()
-    pdf = Path(cache_tmp.name) / "document.pdf"
-    Image.open(invoice).convert("RGB").save(pdf, "PDF")
-    images.append(pdf)
     cfg = Config.model_validate({
         "node": {"id": "image-smoke", "key": "image-smoke-key-012345", "data_dir": cache_tmp.name},
         "scheduler": {"vram_total_mb": 16303, "vram_headroom_mb": 256, "engine_start_timeout_sec": 120},
@@ -92,9 +87,6 @@ async def main() -> None:
                     "像素平面：" in context and "质量信号：" in context and
                     context.endswith("[mmp:agent-context end]")):
                 failures.append(f"{path.name}: agent_context missing image surfaces/quality/boundaries")
-            if path.suffix.lower() == ".pdf":
-                if digest.get("format") != "application/pdf" or digest.get("surfaces", [{}])[0].get("kind") != "page":
-                    failures.append("PDF was not represented as page surfaces")
             source = digest.get("source", {})
             if source.get("engine") == "florence-2-base-ft":
                 base_peak = max(base_peak, node.jobs[body["job_id"]].engine_metrics.get("vram_peak_mb", 0))

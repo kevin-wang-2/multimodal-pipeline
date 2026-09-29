@@ -59,6 +59,11 @@ async def main(wavs: list[Path]) -> int:
             if status != 200:
                 print(json.dumps(body, ensure_ascii=False, indent=2)); failures.append(f"{wav.name}: HTTP {status}"); continue
             d = body["result"]
+            context = (body.get("agent_context") or {}).get("text", "")
+            if not (context.startswith("[mmp:agent-context start]") and
+                    "kind=audio" in context and "缺口：" in context and
+                    context.endswith("[mmp:agent-context end]")):
+                failures.append(f"{wav.name}: agent_context missing audio provenance/gaps/boundaries")
             if os.environ.get("MMP_SMOKE_DUMP"):
                 out = Path(os.environ["MMP_SMOKE_DUMP"]) / (wav.stem + ".digest.json")
                 out.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +103,8 @@ async def main(wavs: list[Path]) -> int:
             status2, body2 = await broker.submit({"type": "triage.audio", "media": {"inline": base64.b64encode(data).decode()}, "wait": 30})
             if not (status2 == 200 and body2.get("cached") is True):
                 failures.append(f"{wav.name}: second submit not cached")
+            elif body2.get("agent_context") != body.get("agent_context"):
+                failures.append(f"{wav.name}: cached agent_context changed")
     finally:
         await link.close()
         await node.close()

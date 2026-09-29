@@ -11,8 +11,9 @@ import { MmpError } from "@mmp/client";
 import { loadConfig } from "./config.js";
 import { makeClient, triageBytes } from "./triage.js";
 
-const MIME: Record<string, string> = { ".m4a": "audio/mp4", ".mp4": "audio/mp4", ".aac": "audio/aac", ".mp3": "audio/mpeg", ".wav": "audio/wav",
-  ".ogg": "audio/ogg", ".opus": "audio/ogg", ".flac": "audio/flac", ".amr": "audio/amr", ".webm": "audio/webm", ".aiff": "audio/aiff" };
+const MIME: Record<string, string> = { ".m4a": "audio/mp4", ".mp4": "video/mp4", ".aac": "audio/aac", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+  ".ogg": "audio/ogg", ".opus": "audio/ogg", ".flac": "audio/flac", ".amr": "audio/amr", ".webm": "video/webm", ".aiff": "audio/aiff",
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif", ".tif": "image/tiff", ".tiff": "image/tiff", ".pdf": "application/pdf" };
 
 async function main(argv: string[]): Promise<number> {
   const args = argv.slice(2);

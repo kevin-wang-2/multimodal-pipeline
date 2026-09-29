@@ -1,4 +1,4 @@
-"""A 侧音频归一化：非 PCM WAV → ffmpeg → 16k 单声道 WAV。echo 是 modal=audio 的引擎，其 result.bytes 反映它实际拿到的文件。"""
+"""A 侧音频归一化：由 capability 声明预处理器，非 PCM WAV → 16k 单声道 WAV。"""
 from __future__ import annotations
 
 import shutil
@@ -34,6 +34,7 @@ async def test_m4a_is_transcoded_to_16k_mono_wav_for_audio_engines(tmp_path):
     m4a = tmp_path / "tone.m4a"
     _make_m4a(m4a)
     s = await build_stack(tmp_path)
+    s.node.registry.types["echo"]["input"]["media"]["preprocessor"] = "audio.to_wav_16k_mono"
     try:
         r = await s.submit(type="echo", media=inline(m4a.read_bytes()), wait=20)
         assert r.status_code == 200, r.text
@@ -65,6 +66,7 @@ async def test_real_wav_passes_through_untouched(tmp_path):
     with wave.open(str(wav), "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(frames)
     s = await build_stack(tmp_path)
+    s.node.registry.types["echo"]["input"]["media"]["preprocessor"] = "audio.to_wav_16k_mono"
     try:
         r = await s.submit(type="echo", media=inline(wav.read_bytes()), wait=20)
         assert r.status_code == 200 and "transcode" not in r.json()["timings_ms"]

@@ -1,6 +1,6 @@
 {
   "name": "@mmp/protocol",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "multimodal-pipeline 协议：JSON Schema（随包打包）、ajv 校验器、从 schema 生成的 TypeScript 类型、错误码表。",
   "main": "./dist/index.js",
@@ -12,6 +12,7 @@
     }
   },
   "scripts": {
+    "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "gen-types": "tsx scripts/gen-types.ts",
     "build": "tsc -p tsconfig.json && node scripts/copy-schemas.mjs",
     "test": "tsx --test test/*.test.ts"

@@ -1,10 +1,16 @@
 {
   "id": "triage.audio",
-  "modal": "audio",
   "description": "音频预检：VAD 定界 + 段级粗类别打标 + 语音段 ASR，产出带时间轴的 digest。",
   "tiers": [],
   "input": {
-    "media": "required",
+    "media": {
+      "presence": "required",
+      "accepts": [
+        "audio/*",
+        "video/*"
+      ],
+      "preprocessor": "audio.to_wav_16k_mono"
+    },
     "params_schema": {
       "type": "object",
       "properties": {
@@ -21,5 +27,9 @@
       "additionalProperties": false
     }
   },
-  "output_schema": "urn:mmp:protocol:1:digest"
+  "purpose": "triage",
+  "output": {
+    "schema": "urn:mmp:protocol:2:digest",
+    "agent_context": "required"
+  }
 }

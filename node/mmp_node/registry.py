@@ -5,6 +5,7 @@ import importlib
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from .config import Config, EngineSection
 from .errors import ApiError
@@ -28,6 +29,7 @@ class EngineSpec:
     internal_source: dict | None = None
     # (task_type, tier) → TierSpec；同一引擎可以提供多个类型的多个档
     tiers: dict[tuple[str, str], dict] = field(default_factory=dict)
+    presenters: dict[str, Callable[[dict], dict]] = field(default_factory=dict)
 
 
 class Registry:
@@ -64,7 +66,8 @@ class Registry:
                           timeout_sec=sec.timeout_sec, capabilities=caps, env=dict(sec.env),
                           resident_vram_mb=sec.resident_vram_mb, run_vram_mb=sec.run_vram_mb,
                           keep_warm=sec.keep_warm, warm_priority=sec.warm_priority,
-                          internal_source=getattr(mod, "INTERNAL_SOURCE", None))
+                          internal_source=getattr(mod, "INTERNAL_SOURCE", None),
+                          presenters=dict(getattr(mod, "AGENT_CONTEXT_PRESENTERS", {})))
 
     # ---- 查询 ----
     def capability(self, task_type: str) -> dict:
@@ -105,5 +108,21 @@ class Registry:
     def capabilities(self) -> list[dict]:
         return list(self.types.values())
 
-    def output_schema(self, task_type: str):
-        return self.capability(task_type).get("output_schema")
+    def result_schema(self, task_type: str):
+        return self.capability(task_type)["output"]["schema"]
+
+    def present_agent_context(self, task_type: str, result: object) -> dict | None:
+        cap = self.capability(task_type)
+        policy = cap["output"]["agent_context"]
+        spec = self.engine_for(task_type, cap["tiers"][0]["tier"])
+        presenter = spec.presenters.get(task_type)
+        if presenter is None:
+            if policy == "required":
+                raise ApiError("engine_failed", f"{task_type} requires agent_context but has no presenter")
+            return None
+        if not isinstance(result, dict):
+            raise ApiError("engine_failed", f"{task_type} cannot present non-object result")
+        context = presenter(result)
+        if not isinstance(context, dict):
+            raise ApiError("engine_failed", f"{task_type} presenter returned invalid agent_context")
+        return context

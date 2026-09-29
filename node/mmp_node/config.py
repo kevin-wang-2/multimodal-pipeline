@@ -14,7 +14,6 @@ ENV_PREFIX = "MMP_"
 class NodeSection(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
     key: str = Field(min_length=16)
-    protocol_version: str = "1.2"
     data_dir: Path = Path("./cache")
 
 
@@ -37,7 +36,7 @@ class MediaSection(BaseModel):
     max_inline_result_bytes: int = 1024 * 1024
     use_env_proxy: bool = False
     max_store_bytes: int = 2 * 1024 * 1024 * 1024   # 媒体目录上限，LRU 淘汰；在跑的任务 pin 住
-    transcode_audio: bool = True                     # modal=audio 的任务：非 PCM WAV 先用 ffmpeg 转 16k 单声道 WAV
+    transcode_audio: bool = True                     # 声明 audio.to_wav_16k_mono 的任务先用 ffmpeg 归一化
     ffmpeg: str = "ffmpeg"                           # 可执行名或绝对路径
     transcode_timeout_sec: float = 120
 

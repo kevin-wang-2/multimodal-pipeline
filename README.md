@@ -102,7 +102,7 @@ ts/                    pnpm workspace
 .gitea/workflows/      ci.yml（unit：契约 + ts + node 验收）、gpu.yml（windows runner：真模型冒烟 + Windows 全套）
 docs/
   架构.md              设计文档（公开版）
-  协议.md              协议 v1.2 人读版，与 protocol/schemas 同步
+  协议.md              协议 v2.0 人读版，与 protocol/schemas 同步
   实施计划.md          M1 的步骤拆分、验收与顺序（S0–S6）
   M0-测试计划.md        M0 四组实验的计划
   结果-T1.md … T5      每组实验的原始记录（负结果也记）

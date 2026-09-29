@@ -81,6 +81,11 @@
       "asr": 210
     }
   },
+  "agent_context": {
+    "format": "mmp-agent-context-v1",
+    "content_type": "text/plain; charset=utf-8",
+    "text": "[mmp:agent-context start]\nmedia=sha256:6b4a... kind=audio\n[mmp:agent-context end]"
+  },
   "timings_ms": {
     "fetch": 3,
     "hash": 1,

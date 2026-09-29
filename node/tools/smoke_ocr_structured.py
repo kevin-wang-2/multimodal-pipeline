@@ -2,7 +2,7 @@
 """ocr.structured 真模型冒烟（GPU 机 / CI gpu job）。起 A + 进程内 B，两个引擎（ocr_structured、triage_audio），检查 S5 验收：
 
 1. T5 的发票（MMP_OCR_INVOICES 下每个子目录：p-001.png + _gt.txt）快档字段全对：发票号码 / 开票日期 / 价税合计 / 合计金额
-2. 结果 PUT 回句柄：把内联上限压到很小，结果必须走 result_ref，PUT 上来的内容过 output_schema
+2. 结果 PUT 回句柄：把内联上限压到很小，结果必须走 result_ref，PUT 上来的内容过 output.schema
 3. VL（tier=gpu）并发 2 提交：第二个排队而不是 OOM，两个都完成且有 markdown / elements
 4. M1 定义第 4 条：批量 OCR 排队中，交互式 triage.audio 仍按时完成
 5. 升级触发：每页有 flags / suggest_upgrade_pages 字段（信号是否触发取决于素材，只检查存在与类型）

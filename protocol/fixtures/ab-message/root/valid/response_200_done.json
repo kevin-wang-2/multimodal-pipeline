@@ -1,6 +1,6 @@
 {
   "type": "response",
-  "protocol_version": "1.0",
+  "protocol_version": "2.0",
   "ts": "2026-09-10T17:00:00+08:00",
   "payload": {
     "req_id": "r-1",
@@ -28,7 +28,7 @@
         "timeline_unit": "sec",
         "segments": [
           {
-            "start": 0.0,
+            "start": 0,
             "end": 2.182,
             "labels": [],
             "label_status": "unclassified",

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+from . import PROTOCOL_VERSION
 from .cache import ResultCache, task_key
 from .config import Config
 from .engine_io import EnginePool
@@ -36,7 +37,7 @@ class Node:
         self.media = MediaStore(cfg.media, cfg.node.data_dir)
         self.cache = ResultCache(cfg.cache_path)
         self.pool = EnginePool(cfg.scheduler.engine_start_timeout_sec, cfg.scheduler.idle_unload_sec,
-                               cfg.node.protocol_version, self.registry.engines.values(),
+                               PROTOCOL_VERSION, self.registry.engines.values(),
                                cfg.scheduler.vram_total_mb, cfg.scheduler.vram_headroom_mb)
         self.sched = Scheduler(cfg, self.registry, self.pool, self.cache, self.media)
         self.jobs: dict[str, Job] = {}
@@ -96,14 +97,19 @@ class Node:
         self.sched.check_backpressure()          # 先于取媒体：别为了说 429 先下载 100MB
         t_fetch = time.monotonic()
         fetched = await self.media.fetch(req["media"])
+        self._validate_media_type(cap, fetched.content_type)
         fetch_ms = int((time.monotonic() - t_fetch) * 1000)
         key = task_key(fetched.media_id, task_type, tier["tier"], tier["engine_version"], params)
 
         hit = self.cache.get(key)
+        if hit is not None and cap["output"]["agent_context"] == "required" and hit.get("result") is None:
+            hit = None
         if hit is not None:
             job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, None, key)
             job.cached, job.source = True, hit["source"]
             job.result, job.result_ref, job.timings_ms = hit.get("result"), hit.get("result_ref"), hit.get("timings_ms") or {}
+            if job.result is not None:
+                job.agent_context = self.sched._agent_context(job, job.result)
             job.finish("done")
             self.jobs[job.job_id] = job
             return job.response()
@@ -171,9 +177,21 @@ class Node:
         if errs:
             raise ApiError("bad_request", "params: " + "; ".join(e.message for e in errs[:3]))
 
+    @staticmethod
+    def _validate_media_type(cap: dict, content_type: str | None) -> None:
+        if content_type is None:
+            return
+        actual = content_type.split(";", 1)[0].strip().lower()
+        accepts = cap["input"]["media"]["accepts"]
+        matched = any(pattern == "*/*" or pattern == actual or
+                      (pattern.endswith("/*") and actual.startswith(pattern[:-1]))
+                      for pattern in accepts)
+        if not matched:
+            raise ApiError("bad_request", f"{cap['id']} does not accept content_type {actual!r}")
+
     # ---- A↔B 消息的 A 侧 ----
     def envelope(self, type_: str, payload: dict) -> dict:
-        return {"type": type_, "protocol_version": self.cfg.node.protocol_version,
+        return {"type": type_, "protocol_version": PROTOCOL_VERSION,
                 "ts": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"), "payload": payload}
 
     def register_message(self, key: str | None = None) -> dict:

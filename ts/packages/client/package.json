@@ -1,8 +1,8 @@
 {
   "name": "@mmp/client",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
-  "description": "multimodal-pipeline 的调用节点（C）客户端：submit / wait / cancel / capabilities，错误码 → 异常，digest → 注入块的确定性模板。只依赖 fetch，不知道也不关心 B 在哪。",
+  "description": "multimodal-pipeline 的通用调用节点（C）客户端：任务传输、按 purpose + Content-Type 发现能力、透传 agent context。",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,6 +29,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc -p tsconfig.json",
     "test": "tsx --test test/*.test.ts"
   },

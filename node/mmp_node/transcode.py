@@ -1,6 +1,6 @@
 """音频归一化：不是 PCM WAV 的音频（m4a / aac / mp3 / ogg / opus / flac / amr …）在 A 侧用 ffmpeg 转成 16 kHz 单声道 WAV，再交给引擎。
 
-放在 A 而不是引擎里：所有 modal=audio 的任务类型共用；引擎环境不必装 ffmpeg；media_id 仍是原始字节的 hash，缓存键不受影响。
+放在 A 而不是引擎里：所有声明 audio.to_wav_16k_mono 的任务共用；引擎环境不必装 ffmpeg；media_id 仍是原始字节的 hash，缓存键不受影响。
 转出的文件是原文件的派生物，跟原文件一起被 LRU 淘汰。
 """
 from __future__ import annotations

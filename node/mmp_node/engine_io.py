@@ -65,6 +65,10 @@ class EngineProcess:
         )
         self._stderr = asyncio.create_task(self._pump_stderr())
         hello = await self._wait_hello()
+        if str(hello.get("protocol_version", "")).split(".")[0] != self.protocol_version.split(".")[0]:
+            await self.kill()
+            raise ApiError("engine_failed",
+                           f"engine {self.spec.name} protocol {hello.get('protocol_version')!r} incompatible with {self.protocol_version}")
         want = {t["engine_version"] for (_, _), t in self.spec.tiers.items() if t["engine"] == hello.get("engine")}
         if want and hello.get("engine_version") not in want:
             await self.kill()

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MmpClient, MmpError, media } from "../src/index.js";
+import { matchesMediaType, MmpClient, MmpError, media, resolveCapability } from "../src/index.js";
 
 type Route = (req: { method: string; path: string; body: any; headers: Record<string, string> }) => { status: number; body?: unknown } | Promise<{ status: number; body?: unknown }>;
 
@@ -86,4 +86,16 @@ test("run: 202 then polls until done; wait honours timeout and cancelled", async
   await assert.rejects(new MmpClient({ baseUrl: "https://b.example", fetch: cancelled.f }).wait(JOB), (e: MmpError) => /cancelled/.test(e.message));
   const slow = fakeFetch(() => ({ status: 202, body: { job_id: JOB, type: "echo", media_id: MID, status: "running" } }));
   await assert.rejects(new MmpClient({ baseUrl: "https://b.example", fetch: slow.f }).wait(JOB, { timeoutMs: 1, pollWaitSec: 1 }), (e: MmpError) => e.code === "timeout");
+});
+
+test("capability resolution is generic across media families and fails explicitly", () => {
+  const response = { protocol_version: "2.0", capabilities: [
+    { capability: { id: "triage.audio", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
+    { capability: { id: "triage.image", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*", "application/pdf"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
+  ] } as any;
+  assert.equal(matchesMediaType("image/*", "Image/PNG; charset=binary"), true);
+  assert.equal(resolveCapability(response, { purpose: "triage", contentType: "video/mp4" }).id, "triage.audio");
+  assert.equal(resolveCapability(response, { purpose: "triage", contentType: "image/png" }).id, "triage.image");
+  assert.throws(() => resolveCapability(response, { purpose: "triage", contentType: "model/gltf+json" }),
+    (e: MmpError) => e.code === "unsupported_type");
 });

@@ -6,14 +6,14 @@ ENGINE_VERSION = "1"
 CAPABILITIES = [
     {
         "id": "echo",
-        "modal": "audio",
+        "purpose": "diagnostic",
         "description": "测试用：返回媒体 hash 与参数，不做任何推理。",
         "tiers": [
             {"tier": "cpu", "engine": ENGINE, "engine_version": ENGINE_VERSION, "cost": "low",
              "latency_hint": "~sleep_ms", "max_concurrency": 4},
         ],
         "input": {
-            "media": "required",
+            "media": {"presence": "required", "accepts": ["*/*"]},
             "params_schema": {
                 "type": "object",
                 "properties": {
@@ -26,13 +26,16 @@ CAPABILITIES = [
                 "additionalProperties": False,
             },
         },
-        "output_schema": {
-            "type": "object",
-            "properties": {
-                "media_id": {"type": "string"}, "bytes": {"type": "integer"}, "params": {"type": "object"},
-                "started_at_ms": {"type": "integer"}, "pad": {"type": "string"},
+        "output": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "media_id": {"type": "string"}, "bytes": {"type": "integer"}, "params": {"type": "object"},
+                    "started_at_ms": {"type": "integer"}, "pad": {"type": "string"},
+                },
+                "required": ["media_id", "bytes", "params", "started_at_ms"],
             },
-            "required": ["media_id", "bytes", "params", "started_at_ms"],
+            "agent_context": "none",
         },
     }
 ]

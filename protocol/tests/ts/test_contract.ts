@@ -52,7 +52,7 @@ function* iterFixtures(): Generator<Case> {
 test("schemas compile under ajv strict mode and carry versioned $id", () => {
   for (const [name, s] of schemas) {
     assert.equal(s.$schema, "https://json-schema.org/draft/2020-12/schema", name);
-    assert.equal(s.$id, `urn:mmp:protocol:1:${name}`, name);
+    assert.equal(s.$id, `urn:mmp:protocol:2:${name}`, name);
     assert.ok(ajv.getSchema(s.$id), `${name} did not compile`);
   }
 });

@@ -93,6 +93,10 @@ class MediaStore:
     def touch(self, media_id: str) -> None:
         self.db.execute("UPDATE media SET last_access=? WHERE media_id=?", (time.time(), media_id))
 
+    def content_type(self, media_id: str) -> str | None:
+        row = self.db.execute("SELECT content_type FROM media WHERE media_id=?", (media_id,)).fetchone()
+        return row[0] if row else None
+
     def total_bytes(self) -> int:
         return self.db.execute("SELECT COALESCE(SUM(size),0) FROM media").fetchone()[0]
 
@@ -147,7 +151,8 @@ class MediaStore:
         if ref is not None and self.has(ref):
             self.touch(ref)
             p = self._path(ref)
-            return Fetched(media_id=ref, path=p, size=p.stat().st_size, content_type=ctype, fetched=False)
+            return Fetched(media_id=ref, path=p, size=p.stat().st_size,
+                           content_type=ctype or self.content_type(ref), fetched=False)
         if "inline" in media:
             data = self._decode_inline(media["inline"])
         elif "get" in media:

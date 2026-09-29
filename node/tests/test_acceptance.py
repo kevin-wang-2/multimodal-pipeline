@@ -194,13 +194,13 @@ async def test_register_rejections():
     from mmp_broker.core import Broker, RegisterRejected
     b = Broker("right-key-0123456789")
     async def send(_): return {}
-    env = {"type": "register", "protocol_version": "1.0", "ts": "2026-09-20T00:00:00Z",
+    env = {"type": "register", "protocol_version": "2.0", "ts": "2026-09-20T00:00:00Z",
            "payload": {"node_id": "n", "node_key": "wrong-key-0123456789", "capabilities": [{"id": "x"}], "engine_versions": {}}}
     with pytest.raises(RegisterRejected) as e:
         b.on_register(env, send)
     assert e.value.code == 4001
     with pytest.raises(RegisterRejected) as e:
-        b.on_register({**env, "protocol_version": "2.0"}, send)
+        b.on_register({**env, "protocol_version": "3.0"}, send)
     assert e.value.code == 4002
     with pytest.raises(RegisterRejected) as e:
         b.on_register({**env, "type": "heartbeat"}, send)

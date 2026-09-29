@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 export * from "./types.js";
 
-export const PROTOCOL_VERSION = "1.2";
+export const PROTOCOL_VERSION = "2.0";
 
 /** schema 目录：发布的包里是 <pkg>/schemas（build 时从仓库 protocol/schemas 复制）；monorepo 内开发时回退到仓库路径。 */
 function locateSchemas(): string {
@@ -25,12 +25,12 @@ function locateSchemas(): string {
 export const SCHEMAS_DIR = locateSchemas();
 
 export const ID = {
-  abMessage: "urn:mmp:protocol:1:ab-message",
-  jobApi: "urn:mmp:protocol:1:job-api",
-  mediaHandle: "urn:mmp:protocol:1:media-handle",
-  digest: "urn:mmp:protocol:1:digest",
-  capability: "urn:mmp:protocol:1:capability",
-  engineIo: "urn:mmp:protocol:1:engine-io",
+  abMessage: "urn:mmp:protocol:2:ab-message",
+  jobApi: "urn:mmp:protocol:2:job-api",
+  mediaHandle: "urn:mmp:protocol:2:media-handle",
+  digest: "urn:mmp:protocol:2:digest",
+  capability: "urn:mmp:protocol:2:capability",
+  engineIo: "urn:mmp:protocol:2:engine-io",
 } as const;
 
 /** 协议.md §4：error → HTTP 状态。单向函数；C 只看 error。 */
@@ -55,7 +55,7 @@ export function schemas(): Ajv2020 {
 }
 
 const cache = new Map<string, ValidateFunction>();
-/** ref 形如 "urn:mmp:protocol:1:job-api#/$defs/JobRequest" 或某个根 schema 的 $id。 */
+/** ref 形如 "urn:mmp:protocol:2:job-api#/$defs/JobRequest" 或某个根 schema 的 $id。 */
 export function validator(ref: string): ValidateFunction {
   let v = cache.get(ref);
   if (!v) {

@@ -15,9 +15,10 @@ from conftest import NODE_DIR, V_ANY, assert_valid, build_stack, validator
 
 sys.path.insert(0, str(NODE_DIR))
 from engines.triage_audio.digest import RawSegment, build_digest, timeline  # noqa: E402
+from engines.triage_audio.presentation import render_agent_context  # noqa: E402
 from engines.triage_audio.vad import HOP_SEC, VadParams, speech_segments  # noqa: E402
 
-V_DIGEST = validator("urn:mmp:protocol:1:digest")
+V_DIGEST = validator("urn:mmp:protocol:2:digest")
 MID = "sha256:" + "ab" * 32
 SRC = {"tier": "cpu", "engine": "e", "engine_version": "1", "generated_at": "2026-09-20T00:00:00Z", "degraded": False}
 
@@ -74,6 +75,18 @@ def test_digest_tag_failure():
     d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "failed", "asr": "skipped"}, 0.30, [], {})
     assert_valid(V_DIGEST, with_source(d))
     assert d["segments"][0]["label_status"] == "failed" and d["segments"][0]["labels"] == []
+
+
+def test_audio_agent_context_is_deterministic_and_explicit_about_gaps():
+    segs = [RawSegment(0.0, 1.0, False, labels=[{"tag": "Music", "score": 0.8}]),
+            RawSegment(1.0, 2.0, True, labels=[{"tag": "Speech", "score": 0.9}],
+                       asr={"text": "你好", "lang": "zh", "confidence": 0.9})]
+    digest = with_source(build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, .3, ["x"], {}))
+    context = render_agent_context(digest)
+    assert context == render_agent_context(digest)
+    assert context["format"] == "mmp-agent-context-v1"
+    assert "[0.00, 1.00) 非语音：Music 0.80" in context["text"]
+    assert "缺口：" in context["text"] and "可用能力：x" in context["text"]
 
 
 # ---------- VAD 状态机 ----------

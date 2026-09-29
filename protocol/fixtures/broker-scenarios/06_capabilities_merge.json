@@ -7,7 +7,7 @@
     {
       "register": {
         "type": "register",
-        "protocol_version": "1.1",
+        "protocol_version": "2.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-a",
@@ -15,7 +15,6 @@
           "capabilities": [
             {
               "id": "echo",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "cpu",
@@ -25,15 +24,23 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "diagnostic",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
               }
             },
             {
               "id": "triage.audio",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "cpu",
@@ -43,10 +50,21 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "audio/*",
+                    "video/*"
+                  ],
+                  "preprocessor": "audio.to_wav_16k_mono"
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "triage",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "required"
               }
             }
           ],
@@ -61,7 +79,7 @@
     {
       "register": {
         "type": "register",
-        "protocol_version": "1.1",
+        "protocol_version": "2.0",
         "ts": "2026-09-21T00:00:00Z",
         "payload": {
           "node_id": "node-b",
@@ -69,7 +87,6 @@
           "capabilities": [
             {
               "id": "echo",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "cpu",
@@ -79,15 +96,23 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "diagnostic",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
               }
             },
             {
               "id": "ocr.structured",
-              "modal": "audio",
               "tiers": [
                 {
                   "tier": "gpu",
@@ -97,10 +122,20 @@
                 }
               ],
               "input": {
-                "media": "required"
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "image/*",
+                    "application/pdf"
+                  ]
+                }
               },
-              "output_schema": {
-                "type": "object"
+              "purpose": "ocr",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
               }
             }
           ],
@@ -117,7 +152,7 @@
       "expect": {
         "http_status": 200,
         "body": {
-          "protocol_version": "1.2",
+          "protocol_version": "2.0",
           "capabilities": [
             {
               "capability": {

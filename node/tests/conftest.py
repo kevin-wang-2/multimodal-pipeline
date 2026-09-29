@@ -41,10 +41,10 @@ def validator(ref: str) -> Draft202012Validator:
     return Draft202012Validator({"$ref": ref}, registry=_REG, format_checker=FormatChecker())
 
 
-V_ANY = validator("urn:mmp:protocol:1:job-api#/$defs/AnyResponse")
-V_ENV = validator("urn:mmp:protocol:1:ab-message")
-V_CAPS = validator("urn:mmp:protocol:1:job-api#/$defs/CapabilitiesResponse")
-V_HEALTH = validator("urn:mmp:protocol:1:job-api#/$defs/HealthResponse")
+V_ANY = validator("urn:mmp:protocol:2:job-api#/$defs/AnyResponse")
+V_ENV = validator("urn:mmp:protocol:2:ab-message")
+V_CAPS = validator("urn:mmp:protocol:2:job-api#/$defs/CapabilitiesResponse")
+V_HEALTH = validator("urn:mmp:protocol:2:job-api#/$defs/HealthResponse")
 
 
 def assert_valid(v: Draft202012Validator, data) -> None:

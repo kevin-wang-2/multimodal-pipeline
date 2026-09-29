@@ -8,6 +8,7 @@ import sys
 
 import uvicorn
 
+from mmp_node import PROTOCOL_VERSION
 from mmp_node.config import load_config
 from mmp_node.node import Node
 from mmp_node.ws_client import WsLink
@@ -22,7 +23,7 @@ async def serve(cfg_path: str | None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     node = Node(cfg)
     await node.start()
-    broker = Broker(cfg.node.key, cfg.node.protocol_version, cfg.broker.inflight_grace_sec)
+    broker = Broker(cfg.node.key, PROTOCOL_VERSION, cfg.broker.inflight_grace_sec)
     link = InProcLink(node, broker)
     try:
         await link.connect()

@@ -70,7 +70,7 @@ async def test_keep_warm_gpu_is_evicted_for_heavy_then_restored(monkeypatch, tmp
                           tiers={(name, "gpu-fast"): tier})
 
     base, heavy = spec("image-base", True, 1024), spec("paddle-vl", False, 12288)
-    pool = EnginePool(5, 300, "1.2", [base, heavy], vram_total_mb=13000)
+    pool = EnginePool(5, 300, "2.0", [base, heavy], vram_total_mb=13000)
     pool.start()
     await asyncio.sleep(0)
     await asyncio.sleep(0)
@@ -107,7 +107,7 @@ async def test_keep_warm_gpu_stays_loaded_when_capacity_is_enough(monkeypatch, t
                       keep_warm=True, warm_priority=100, tiers=tier("image-base", 900))
     heavy = EngineSpec("paddle-vl", "x", ["x"], tmp_path, 5, [], resident_vram_mb=14000,
                        tiers=tier("paddle-vl", 14000))
-    pool = EnginePool(5, 300, "1.2", [base, heavy], vram_total_mb=16384, vram_headroom_mb=512)
+    pool = EnginePool(5, 300, "2.0", [base, heavy], vram_total_mb=16384, vram_headroom_mb=512)
     pool.start(); await asyncio.sleep(0); await asyncio.sleep(0)
     await pool.run(heavy, {"job_id": "x"}, 5, 14000)
     assert "stop:image-base" not in events

@@ -48,10 +48,11 @@ test("request timeout aborts transport pending without dropping the node", async
     }, { once: true });
   });
   broker.onRegister({
-    type: "register", protocol_version: "1.1", ts: "2026-09-21T00:00:00Z",
+    type: "register", protocol_version: "2.0", ts: "2026-09-21T00:00:00Z",
     payload: { node_id: "node-a", node_key: "scenario-node-key-0123456789", capabilities: [{
-      id: "echo", modal: "audio", tiers: [{ tier: "cpu", engine: "e-echo", engine_version: "1", cost: "low" }],
-      input: { media: "required" }, output_schema: { type: "object" },
+      id: "echo", purpose: "diagnostic", tiers: [{ tier: "cpu", engine: "e-echo", engine_version: "1", cost: "low" }],
+      input: { media: { presence: "required", accepts: ["*/*"] } },
+      output: { schema: { type: "object" }, agent_context: "none" },
     }], engine_versions: { "e-echo": "1" } },
   }, send);
 

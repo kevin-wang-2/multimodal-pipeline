@@ -24,7 +24,7 @@ SRC = {"tier": "cpu", "engine": "e", "engine_version": "1", "generated_at": "202
 
 
 def with_source(d: dict) -> dict:
-    return {**d, "source": SRC}
+    return {**d, "capabilities_available": [], "source": SRC}
 
 
 # ---------- timeline ----------
@@ -42,7 +42,7 @@ def test_timeline_alternates_and_covers_full_duration():
 def test_digest_low_confidence_is_unclassified_and_in_gaps():
     segs = [RawSegment(0.0, 2.0, False, labels=[{"tag": "Boing", "score": 0.118}]),
             RawSegment(2.0, 4.0, True, labels=[{"tag": "Speech", "score": 0.7}], asr={"text": "你好", "lang": "zh"})]
-    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, ["x"], {"vad": 1})
+    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, {"vad": 1})
     assert_valid(V_DIGEST, with_source(d))
     assert d["segments"][0]["labels"] == [] and d["segments"][0]["label_status"] == "unclassified"
     assert d["segments"][0]["asr"] is None
@@ -55,7 +55,7 @@ def test_digest_low_confidence_is_unclassified_and_in_gaps():
 def test_digest_classified_nonspeech_and_no_structure_fact_when_speech_first():
     segs = [RawSegment(0.0, 2.0, True, labels=[{"tag": "Speech", "score": 0.9}], asr={"text": "a", "lang": "en"}),
             RawSegment(2.0, 4.0, False, labels=[{"tag": "Music", "score": 0.8}, {"tag": "Synthesizer", "score": 0.6}, {"tag": "Dog", "score": 0.1}])]
-    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, [], {})
+    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, {})
     assert_valid(V_DIGEST, with_source(d))
     assert [l["tag"] for l in d["segments"][1]["labels"]] == ["Music", "Synthesizer"]  # Dog 被阈值过滤
     assert any("Music、Synthesizer" in g and "只知类别" in g for g in d["gaps"])
@@ -64,7 +64,7 @@ def test_digest_classified_nonspeech_and_no_structure_fact_when_speech_first():
 
 def test_digest_asr_failure_omits_field_and_marks_gap():
     segs = [RawSegment(0.0, 2.0, True, labels=[{"tag": "Speech", "score": 0.9}], asr=None, asr_failed=True)]
-    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "failed"}, 0.30, [], {})
+    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "failed"}, 0.30, {})
     assert_valid(V_DIGEST, with_source(d))
     assert "asr" not in d["segments"][0]              # 省略 = 取不到；不是 null
     assert any("ASR 失败" in g for g in d["gaps"]) and any("工具 asr 状态 failed" in g for g in d["gaps"])
@@ -72,7 +72,7 @@ def test_digest_asr_failure_omits_field_and_marks_gap():
 
 def test_digest_tag_failure():
     segs = [RawSegment(0.0, 2.0, False, tag_failed=True)]
-    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "failed", "asr": "skipped"}, 0.30, [], {})
+    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "failed", "asr": "skipped"}, 0.30, {})
     assert_valid(V_DIGEST, with_source(d))
     assert d["segments"][0]["label_status"] == "failed" and d["segments"][0]["labels"] == []
 
@@ -81,7 +81,8 @@ def test_audio_agent_context_is_deterministic_and_explicit_about_gaps():
     segs = [RawSegment(0.0, 1.0, False, labels=[{"tag": "Music", "score": 0.8}]),
             RawSegment(1.0, 2.0, True, labels=[{"tag": "Speech", "score": 0.9}],
                        asr={"text": "你好", "lang": "zh", "confidence": 0.9})]
-    digest = with_source(build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, .3, ["x"], {}))
+    digest = with_source(build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, .3, {}))
+    digest["capabilities_available"] = ["x"]
     context = render_agent_context(digest)
     assert context == render_agent_context(digest)
     assert context["format"] == "mmp-agent-context-v1"
@@ -160,7 +161,7 @@ def test_vad_does_not_merge_by_default_and_short_gap_is_surfaced():
     segs = [RawSegment(0.0, 1.0, True, labels=[{"tag": "Speech", "score": 0.99}], asr={"text": "听听我的绝对音感准不准", "lang": "zh", "confidence": 0.99}),
             RawSegment(1.0, 1.3, False, labels=[{"tag": "Whistling", "score": 0.8}]),
             RawSegment(1.3, 2.0, True, labels=[{"tag": "Speech", "score": 0.99}], asr={"text": "这个是A吧", "lang": "zh", "confidence": 0.99})]
-    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, [], {})
+    d = build_digest(MID, 2.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, {})
     assert_valid(V_DIGEST, with_source(d))
     assert len(d["segments"]) == 3 and d["segments"][1]["labels"][0]["tag"] == "Whistling"   # 口哨没被抹掉
     assert any("300ms，Whistling）夹在两段语音之间" in g for g in d["gaps"])
@@ -170,7 +171,7 @@ def test_low_speech_confidence_asr_is_flagged_in_gaps():
     """喷麦被 VAD 判为语音、SenseVoice 幻觉出 "Yeah."：asr.confidence 用打标 Speech 分数，低于阈值进 gaps。"""
     segs = [RawSegment(0.61, 1.09, True, labels=[{"tag": "Sound effect", "score": 0.345}], asr={"text": "Yeah.", "lang": "en", "confidence": 0.0}),
             RawSegment(1.09, 4.0, True, labels=[{"tag": "Speech", "score": 0.996}], asr={"text": "帮我", "lang": "zh", "confidence": 0.996})]
-    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, [], {})
+    d = build_digest(MID, 4.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, {})
     assert_valid(V_DIGEST, with_source(d))
     assert d["segments"][0]["asr"]["confidence"] == 0.0 and d["segments"][1]["asr"]["confidence"] == 0.996
     assert any("置信度低" in g and "Yeah." in g and "段长 480ms" in g for g in d["gaps"])
@@ -181,7 +182,7 @@ def test_low_speech_confidence_asr_is_flagged_in_gaps():
 def test_vad_missed_speech_recovered_by_tagger_is_marked():
     segs = [RawSegment(3.39, 5.12, True, labels=[{"tag": "Speech", "score": 0.99}], asr={"text": "识别一下这首歌", "lang": "zh", "confidence": 0.99}),
             RawSegment(5.12, 6.85, True, labels=[{"tag": "Speech", "score": 0.98}], asr={"text": "是什么歌", "lang": "zh", "confidence": 0.98}, vad_missed=True)]
-    d = build_digest(MID, 6.85, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, [], {})
+    d = build_digest(MID, 6.85, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, 0.30, {})
     assert_valid(V_DIGEST, with_source(d))
     assert d["segments"][1]["asr"]["text"] == "是什么歌"
     assert any("VAD 未判为语音，但打标 Speech 0.98" in g and "已补跑 ASR" in g for g in d["gaps"])

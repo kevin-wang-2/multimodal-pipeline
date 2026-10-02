@@ -98,7 +98,7 @@ def build_digest(media_id: str, media_format: str, surfaces: list[dict], caption
         gaps.append("视觉描述失败，图片内容未知")
     digest = {"media_id": media_id, "kind": "image", "format": media_format, "surfaces": surfaces,
               "regions": normalized, "quality_signals": signals, "tools": tools, "gaps": gaps,
-              "capabilities_available": ["ocr.structured"], "timings_ms": timings}
+              "timings_ms": timings}
     if text:
         digest["description"] = {"text": text, "provenance": {"kind": "model_inference", "tools": ["visual_caption"]}}
     return digest, reason

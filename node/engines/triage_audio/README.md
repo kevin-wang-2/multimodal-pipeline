@@ -51,7 +51,7 @@ env = { MMP_MODELS_DIR = "/path/to/models", MMP_ENGINE_THREADS = "4" }
 ## 边界
 
 - 引擎本身只接 PCM WAV（8/16/24/32 bit，任意采样率与声道数，线性插值重采到 16k）；m4a / mp3 / ogg / flac / amr 等由 A 用 ffmpeg 转码后送进来（`mmp_node/transcode.py`），A 没有 ffmpeg 时 → `400 bad_request`。
-- `capabilities_available` 是固定清单（T4 的 7 项），M2 起由注册表按媒体特征筛。
+- 引擎不决定 `capabilities_available`；A 在响应阶段按当前注册表、原始 MIME 与本 digest 的标签/锚点派生。
 - 工具部分失败不中断：`tools` 里标 `failed` / `partial`，gaps 里说明，A 把 `source.degraded` 置 true。
 
 ## 冒烟

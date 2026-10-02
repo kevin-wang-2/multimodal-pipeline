@@ -267,7 +267,10 @@ class Scheduler:
             await self._place_result(job, result)
             cache_result = (result if self.registry.capability(job.task_type)["output"]["agent_context"] != "none"
                             else job.result)
-            self.cache.put(task_key(job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"], job.params),
+            cache_content_type = (job.content_type
+                                  if self.registry.result_schema(job.task_type) == schemas.DIGEST_ID else None)
+            self.cache.put(task_key(job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
+                                    job.params, cache_content_type),
                            job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
                            job.source, cache_result, job.result_ref, job.timings_ms)
             job.finish("done")
@@ -324,6 +327,7 @@ class Scheduler:
                 job.source["degraded"] = True
                 job.source["degraded_reason"] = "partial_failure"
             result["source"] = job.source
+            self.registry.populate_capabilities_available(result, job.content_type)
         v = schemas.validator_for(out_schema)
         if v is not None:
             errs = schemas.errors(v, result)

@@ -26,6 +26,7 @@ SURFACES = [{"id": "image_0", "kind": "image", "index": 0, "width_px": 100,
 
 
 def _source(d: dict) -> dict:
+    d["capabilities_available"] = []
     d["source"] = {"tier": "gpu-fast", "engine": "florence-2-base-ft", "engine_version": "1",
                    "generated_at": "2026-09-29T00:00:00Z", "degraded": False}
     return d
@@ -51,6 +52,7 @@ def test_image_digest_quality_failure_requests_objective_retry():
     src = {"tier": "gpu", "engine": "florence-2-large-ft", "engine_version": "1",
            "generated_at": "2026-09-29T00:00:00Z", "degraded": True,
            "degraded_reason": "partial_failure"}
+    digest["capabilities_available"] = []
     digest["source"] = src
     assert not list(V_DIGEST.iter_errors(digest))
 
@@ -144,16 +146,20 @@ async def test_image_capability_rejects_non_image_content_type(tmp_path, content
 
 
 async def test_image_agent_context_survives_result_ref_cache_hit(tmp_path):
-    stack = await build_stack(tmp_path, engines={"triage_image": {"module": "engines.triage_image", "timeout_sec": 5}},
-                              scheduler__vram_total_mb=1024, media__max_inline_result_bytes=1)
+    stack = await build_stack(tmp_path, engines={
+        "triage_image": {"module": "engines.triage_image", "timeout_sec": 5},
+        "ocr_structured": {"module": "engines.ocr_structured", "timeout_sec": 5},
+    }, scheduler__vram_total_mb=16384, media__max_inline_result_bytes=1)
 
     async def fake_run(_spec, job, _timeout, _vram):
         digest, _ = build_digest(job["media_id"], "image/png", SURFACES, ["a contract"],
                                  [RawRegion("image_0", "contract", [1, 1, 20, 20], "phrase_grounding")], 0, .8, {})
         return EngineResult(digest, {})
 
-    async def fake_put(_endpoint, _data, _content_type):
-        return None
+    puts = []
+
+    async def fake_put(endpoint, data, _content_type):
+        puts.append((endpoint["url"], data))
 
     stack.node.pool.run = fake_run
     stack.node.media.put = fake_put
@@ -162,9 +168,15 @@ async def test_image_agent_context_survives_result_ref_cache_hit(tmp_path):
     try:
         first = await stack.submit(type="triage.image", media=handle, wait=5)
         assert first.status_code == 200 and "result_ref" in first.json()
+        assert b'"capabilities_available": ["ocr.structured"]' in puts[0][1]
         assert first.json()["agent_context"]["text"].startswith("[mmp:agent-context start]")
-        second = await stack.submit(type="triage.image", media={"ref": first.json()["media_id"]}, wait=5)
-        assert second.json()["cached"] is True and second.json()["agent_context"] == first.json()["agent_context"]
-        assert second.json()["result_ref"] == first.json()["result_ref"]
+        del stack.node.registry.types["ocr.structured"]
+        second = await stack.submit(type="triage.image", media={"ref": first.json()["media_id"],
+                                    "put": {"url": "https://upload.example/result-v2"}}, wait=5)
+        assert second.json()["cached"] is True
+        assert "可用能力：无" in second.json()["agent_context"]["text"]
+        assert second.json()["result_ref"] != first.json()["result_ref"]
+        assert puts[-1][0].endswith("result-v2")
+        assert b'"capabilities_available": []' in puts[-1][1]
     finally:
         await stack.client.aclose(); await stack.link.close(); await stack.node.close()

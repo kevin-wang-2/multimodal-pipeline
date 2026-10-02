@@ -1,6 +1,6 @@
 import type { CapabilitiesResponse, HealthResponse, JobDone, JobRequest } from "@mmp/protocol";
 import { MmpError } from "./errors.js";
-import { resolveCapability, type CapabilityQuery } from "./capabilities.js";
+import { describeCapability, resolveCapability, type CapabilityQuery } from "./capabilities.js";
 
 /** 任务态响应：200 done / cancelled、202 queued / running。失败以 MmpError 抛出。 */
 export type JobStatusResponse = JobDone | {
@@ -63,6 +63,11 @@ export class MmpClient {
 
   async resolveCapability(query: CapabilityQuery) {
     return resolveCapability(await this.capabilities(), query);
+  }
+
+  /** 按 id 拉取一项能力的说明、输入 schema、档位与输出契约。 */
+  async describe(id: string) {
+    return describeCapability(await this.capabilities(), id);
   }
 
   health(): Promise<HealthResponse> {

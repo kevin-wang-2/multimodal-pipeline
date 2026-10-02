@@ -16,7 +16,8 @@ const done = await c.run(
 prompt = done.agent_context!.text + "\n\n" + userMessage; // 任务端生成，client 只透传
 
 // 同一媒体的后续任务用 ref：A 本地有就不再上传 / 下载
-await c.run({ type: "ocr.structured", media: media.ref(done.media_id), tier: "gpu", params: { pages: [2] } });
+const ocr = await c.describe("ocr.structured"); // 仅在准备调用时拉这一项的 params schema
+await c.run({ type: ocr.id, media: media.ref(done.media_id), tier: "gpu", params: { pages: [2] } });
 ```
 
 ## API
@@ -27,10 +28,11 @@ await c.run({ type: "ocr.structured", media: media.ref(done.media_id), tier: "gp
 | `get(jobId, waitSec?)` / `cancel(jobId, waitSec?)` | `GET` / `DELETE /jobs/{id}` |
 | `capabilities()` / `health()` | B 的注册表汇总 / 在线节点 |
 | `resolveCapability({purpose, contentType})` | 读取注册表并选出唯一匹配能力；未知或歧义显式抛错 |
+| `describe(id)` | 按 id 取得一项能力的说明、params schema、档位和输出契约 |
 | `wait(jobId, {timeoutMs, pollWaitSec, signal})` | 轮询到 `done`；`failed` / `cancelled` 抛错 |
 | `run(job, opts)` | `submit` + `wait` |
 | `media.inline / get / ref / refOr / withPut` | 媒体句柄构造（协议.md §5） |
-| `matchesMediaType(pattern, contentType)` / `resolveCapability(response, query)` | 纯函数形式的 MIME 匹配与能力解析 |
+| `matchesMediaType(pattern, contentType)` / `resolveCapability(response, query)` / `describeCapability(response, id)` | 纯函数形式的 MIME 匹配、能力解析与按名描述 |
 
 ### 错误
 

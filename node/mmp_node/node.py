@@ -12,7 +12,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from . import PROTOCOL_VERSION
+from . import PROTOCOL_VERSION, schemas
 from .cache import ResultCache, task_key
 from .config import Config
 from .engine_io import EnginePool
@@ -99,17 +99,30 @@ class Node:
         fetched = await self.media.fetch(req["media"])
         self._validate_media_type(cap, fetched.content_type)
         fetch_ms = int((time.monotonic() - t_fetch) * 1000)
-        key = task_key(fetched.media_id, task_type, tier["tier"], tier["engine_version"], params)
+        cache_content_type = (fetched.content_type
+                              if cap["output"]["schema"] == schemas.DIGEST_ID else None)
+        key = task_key(fetched.media_id, task_type, tier["tier"], tier["engine_version"], params,
+                       cache_content_type)
 
         hit = self.cache.get(key)
         if hit is not None and cap["output"]["agent_context"] == "required" and hit.get("result") is None:
             hit = None
         if hit is not None:
-            job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, None, key)
+            job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, None,
+                                fetched.content_type, key)
             job.cached, job.source = True, hit["source"]
             job.result, job.result_ref, job.timings_ms = hit.get("result"), hit.get("result_ref"), hit.get("timings_ms") or {}
             if job.result is not None:
+                capabilities_changed = self.registry.populate_capabilities_available(job.result, job.content_type)
                 job.agent_context = self.sched._agent_context(job, job.result)
+                if capabilities_changed and job.result_ref is not None:
+                    job.result_ref = None
+                    result, job.result = job.result, None
+                    await self.sched._place_result(job, result)
+                if capabilities_changed:
+                    self.cache.put(key, job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
+                                   job.source, job.result if job.result is not None else hit.get("result"),
+                                   job.result_ref, job.timings_ms)
             job.finish("done")
             self.jobs[job.job_id] = job
             return job.response()
@@ -119,7 +132,8 @@ class Node:
             await active.wait(wait_s)
             return active.response()
 
-        job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, fetched.path, key)
+        job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, fetched.path,
+                            fetched.content_type, key)
         job.timings_ms["fetch"] = fetch_ms       # ref 命中时 ≈ 0：这就是"没重复拉"的证据
         self.jobs[job.job_id] = job
         self.media.pin(job.media_id)          # 排队 / 运行期间不许被 LRU 淘汰；scheduler 收尾时 unpin
@@ -149,10 +163,11 @@ class Node:
             raise ApiError("not_found", f"unknown job {job_id}")
         return job
 
-    def _new_job(self, task_type, priority, tier, params, media, media_id, media_path, key) -> Job:
+    def _new_job(self, task_type, priority, tier, params, media, media_id, media_path, content_type, key) -> Job:
         self._seq += 1
         return Job(job_id=new_job_id(self.node_id), task_type=task_type, priority=priority, tier=tier, params=params,
-                   media=media, media_id=media_id, media_path=media_path, key=key, seq=self._seq)
+                   media=media, media_id=media_id, media_path=media_path, content_type=content_type,
+                   key=key, seq=self._seq)
 
     @staticmethod
     def _normalize_params(cap: dict, params: dict) -> dict:

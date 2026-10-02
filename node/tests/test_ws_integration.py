@@ -28,6 +28,7 @@ from mmp_node.ws_client import WsLink
 
 CLI = NODE_DIR.parent / "ts" / "packages" / "broker" / "dist" / "cli.js"
 OPENCLAW_SMOKE = Path(__file__).with_name("openclaw_host_smoke.mjs")
+CLIENT_CAPABILITY_SMOKE = Path(__file__).with_name("client_capability_smoke.mjs")
 NODE_BIN = shutil.which("node")
 KEY = "integration-node-key-0123456789"
 sys.path.insert(0, str(NODE_DIR))
@@ -190,6 +191,60 @@ async def test_openclaw_host_discovers_image_triage_and_injects_context(tmp_path
         stdout, stderr = await asyncio.wait_for(proc.communicate(), 20)
         assert proc.returncode == 0, stderr.decode(errors="replace")
         assert b'"mediaId":"sha256:' in stdout
+    finally:
+        broker.stop()
+        await link.close()
+        await node.close()
+
+
+async def test_client_discovers_describes_and_runs_image_capability(tmp_path):
+    """通用 C 端只从 digest 取能力 id，调用时再 describe，然后沿同一媒体 ref 执行。"""
+    from engines.triage_image.digest import RawRegion, build_digest
+
+    port = free_port()
+    broker = BrokerProc(port, tmp_path)
+    cfg = make_config(tmp_path, engines={
+        "triage_image": {"module": "engines.triage_image", "timeout_sec": 5},
+        "ocr_structured": {"module": "engines.ocr_structured", "timeout_sec": 5},
+    }, broker__enabled=False, scheduler__vram_total_mb=16384)
+    cfg.brokers = [endpoint(port)]
+    node = Node(cfg, NODE_DIR)
+
+    async def fake_run(spec, job, _timeout, _vram):
+        if spec.name == "triage_image":
+            surfaces = [{"id": "image_0", "kind": "image", "index": 0, "width_px": 64,
+                         "height_px": 48, "rotation_deg": 0}]
+            digest, _ = build_digest(
+                job["media_id"], "image/png", surfaces, ["A person holds a contract."],
+                [RawRegion("image_0", "contract", [4, 5, 40, 30], "phrase_grounding")],
+                0, .8, {"caption": 1},
+            )
+            return EngineResult(digest, {"caption": 1})
+        return EngineResult({
+            "page_count": 1,
+            "pages": [{"page": 1, "tier": "gpu-fast", "width": 64, "height": 48,
+                       "text": "contract", "lines": [], "quality": {"lines": 1, "chars": 8},
+                       "flags": []}],
+            "suggest_upgrade_pages": [],
+        }, {"ocr": 1})
+
+    node.pool.run = fake_run
+    await node.start()
+    link = WsLink(node, cfg.brokers[0])
+    try:
+        await broker.start()
+        link.start()
+        await broker.wait_nodes(1)
+        command = [NODE_BIN, str(CLIENT_CAPABILITY_SMOKE), f"http://127.0.0.1:{port}"]
+        if module := os.environ.get("MMP_CLIENT_COMPAT_MODULE"):
+            command.append(module)
+        proc = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), 20)
+        assert proc.returncode == 0, stderr.decode(errors="replace")
+        assert b'"capability":"ocr.structured"' in stdout
     finally:
         broker.stop()
         await link.close()

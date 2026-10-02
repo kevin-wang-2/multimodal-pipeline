@@ -13,8 +13,13 @@ def params_hash(params: dict) -> str:
     return hashlib.sha256(canon.encode()).hexdigest()[:32]
 
 
-def task_key(media_id: str, task_type: str, tier: str, engine_version: str, params: dict) -> str:
-    return f"{media_id}|{task_type}|{tier}|{engine_version}|{params_hash(params)}"
+def task_key(media_id: str, task_type: str, tier: str, engine_version: str, params: dict,
+             content_type: str | None = None) -> str:
+    base = f"{media_id}|{task_type}|{tier}|{engine_version}|{params_hash(params)}"
+    if content_type is None:
+        return base
+    context = content_type.split(";", 1)[0].strip().lower()
+    return f"{base}|{context}"
 
 
 class ResultCache:

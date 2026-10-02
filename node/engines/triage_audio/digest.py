@@ -50,7 +50,7 @@ def _fmt(t: float) -> str:
 
 
 def build_digest(media_id: str, duration: float, segs: list[RawSegment], tools: dict[str, str],
-                 threshold: float, capabilities_available: list[str], timings_ms: dict[str, int]) -> dict:
+                 threshold: float, timings_ms: dict[str, int]) -> dict:
     out_segs = []
     gaps: list[str] = []
     speech_dur = 0.0
@@ -124,6 +124,5 @@ def build_digest(media_id: str, duration: float, segs: list[RawSegment], tools: 
         "global": {"speech_ratio": round(speech_dur / duration, 3) if duration > 0 else 0.0},
         "tools": tools,
         "gaps": gaps,
-        "capabilities_available": list(capabilities_available),
         "timings_ms": timings_ms,
     }

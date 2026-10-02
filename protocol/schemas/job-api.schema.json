@@ -182,6 +182,46 @@
       "required": ["format", "content_type", "text"],
       "additionalProperties": false
     },
+    "Usage": {
+      "description": "本次交付的引擎算力审计口径。只计算 run 消息发出到 result 收到的引擎执行时间，不含排队、模型加载、媒体取放与结果 PUT。",
+      "type": "object",
+      "properties": {
+        "served_from": {
+          "type": "string",
+          "enum": ["compute", "cache"]
+        },
+        "tier": {
+          "$ref": "urn:mmp:protocol:2:capability#/$defs/Tier"
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compute_ms": {
+          "description": "最终成功尝试占用引擎的毫秒数；缓存命中固定为 0。",
+          "type": "integer",
+          "minimum": 0
+        },
+        "wasted_ms": {
+          "description": "最终成功前因超时回落或质量升级而废弃的引擎执行毫秒数；缓存命中固定为 0。",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["served_from", "tier", "engine", "compute_ms", "wasted_ms"],
+      "allOf": [
+        {
+          "if": { "properties": { "served_from": { "const": "cache" } }, "required": ["served_from"] },
+          "then": {
+            "properties": {
+              "compute_ms": { "const": 0 },
+              "wasted_ms": { "const": 0 }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
     "JobDone": {
       "description": "200：任务完成。result 与 result_ref 二选一。",
       "type": "object",
@@ -212,6 +252,9 @@
         },
         "agent_context": {
           "$ref": "#/$defs/AgentContext"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
         },
         "timings_ms": {
           "type": "object",

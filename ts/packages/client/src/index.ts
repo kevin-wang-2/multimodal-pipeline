@@ -5,4 +5,4 @@ export type { ClientErrorCode } from "./errors.js";
 export { media } from "./media.js";
 export { describeCapability, matchesMediaType, resolveCapability } from "./capabilities.js";
 export type { CapabilityQuery } from "./capabilities.js";
-export type { JobRequest, JobDone, Digest, MediaHandle, Capability, CapabilitiesResponse, HealthResponse } from "@mmp/protocol";
+export type { JobRequest, JobDone, Usage, Digest, MediaHandle, Capability, CapabilitiesResponse, HealthResponse } from "@mmp/protocol";

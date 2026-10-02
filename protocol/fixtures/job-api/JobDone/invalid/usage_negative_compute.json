@@ -1,0 +1,23 @@
+{
+  "job_id": "node-01J7ZQ9K3W8B6Q4M2N1P5R7S9T",
+  "type": "triage.audio",
+  "status": "done",
+  "media_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "cached": false,
+  "source": {
+    "tier": "cpu",
+    "engine": "audio-fast",
+    "engine_version": "1",
+    "generated_at": "2026-10-02T12:00:00+08:00",
+    "degraded": false,
+    "params": {}
+  },
+  "usage": {
+    "served_from": "compute",
+    "tier": "cpu",
+    "engine": "audio-fast",
+    "compute_ms": -1,
+    "wasted_ms": 0
+  },
+  "result": {}
+}

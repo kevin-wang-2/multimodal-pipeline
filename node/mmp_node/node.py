@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -111,7 +112,10 @@ class Node:
             job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, None,
                                 fetched.content_type, key)
             job.cached, job.source = True, hit["source"]
-            job.result, job.result_ref, job.timings_ms = hit.get("result"), hit.get("result_ref"), hit.get("timings_ms") or {}
+            job.result, job.result_ref = hit.get("result"), hit.get("result_ref")
+            job.timings_ms = {"fetch": fetch_ms}
+            job.usage = {"served_from": "cache", "tier": job.source["tier"], "engine": job.source["engine"],
+                         "compute_ms": 0, "wasted_ms": 0}
             if job.result is not None:
                 capabilities_changed = self.registry.populate_capabilities_available(job.result, job.content_type)
                 job.agent_context = self.sched._agent_context(job, job.result)
@@ -125,6 +129,10 @@ class Node:
                                    job.result_ref, job.timings_ms)
             job.finish("done")
             self.jobs[job.job_id] = job
+            log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
+                                 "tier": job.source["tier"], "degraded": job.source.get("degraded"),
+                                 "cached": True, "usage": job.usage, "timings_ms": job.timings_ms},
+                                ensure_ascii=False))
             return job.response()
 
         active = self.sched.find_active(key)     # 同键合并：返回已有 job

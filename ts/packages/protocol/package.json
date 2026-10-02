@@ -1,6 +1,6 @@
 {
   "name": "@mmp/protocol",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "type": "module",
   "description": "multimodal-pipeline 协议：JSON Schema（随包打包）、ajv 校验器、从 schema 生成的 TypeScript 类型、错误码表。",
   "main": "./dist/index.js",

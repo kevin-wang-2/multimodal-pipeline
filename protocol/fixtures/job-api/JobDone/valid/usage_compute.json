@@ -1,0 +1,24 @@
+{
+  "job_id": "node-01J7ZQ9K3W8B6Q4M2N1P5R7S9T",
+  "type": "triage.image",
+  "status": "done",
+  "media_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "cached": false,
+  "source": {
+    "tier": "gpu",
+    "engine": "florence-2-large-ft",
+    "engine_version": "1",
+    "generated_at": "2026-10-02T12:00:00+08:00",
+    "degraded": true,
+    "degraded_reason": "partial_failure",
+    "params": {}
+  },
+  "usage": {
+    "served_from": "compute",
+    "tier": "gpu",
+    "engine": "florence-2-large-ft",
+    "compute_ms": 913,
+    "wasted_ms": 127
+  },
+  "result": {}
+}

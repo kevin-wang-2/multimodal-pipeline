@@ -112,11 +112,33 @@ export type JobDone = {
   };
   result_ref?: ResultRef;
   agent_context?: AgentContext;
+  usage?: Usage;
   timings_ms?: {
     [k: string]: number;
   };
 } & {
   [k: string]: unknown;
+};
+/**
+ * 本次交付的引擎算力审计口径。只计算 run 消息发出到 result 收到的引擎执行时间，不含排队、模型加载、媒体取放与结果 PUT。
+ */
+export type Usage = {
+  [k: string]: unknown;
+} & {
+  served_from: "compute" | "cache";
+  /**
+   * 引擎档位。cpu 便宜档常开；gpu-fast 快档；gpu 慢档 / 重模型；remote 由 A 转调外部服务。
+   */
+  tier: "cpu" | "gpu-fast" | "gpu" | "remote";
+  engine: string;
+  /**
+   * 最终成功尝试占用引擎的毫秒数；缓存命中固定为 0。
+   */
+  compute_ms: number;
+  /**
+   * 最终成功前因超时回落或质量升级而废弃的引擎执行毫秒数；缓存命中固定为 0。
+   */
+  wasted_ms: number;
 };
 /**
  * 自动预检产出的任务无关结构化摘要。audio 用时间段锚定事实；image 用 surface + bbox 锚定视觉索引。gaps 始终显式声明未覆盖信息。
@@ -252,6 +274,7 @@ export interface Protocol {
   "job-api__Source"?: Source;
   "job-api__ResultRef"?: ResultRef;
   "job-api__AgentContext"?: AgentContext;
+  "job-api__Usage"?: Usage;
   "job-api__JobDone"?: JobDone;
   "job-api__JobPending"?: JobPending;
   "job-api__JobFailed"?: JobFailed;

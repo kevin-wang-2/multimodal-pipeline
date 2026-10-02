@@ -134,6 +134,13 @@
               "generated_at": "2026-09-21T00:00:00Z",
               "degraded": false
             },
+            "usage": {
+              "served_from": "compute",
+              "tier": "cpu",
+              "engine": "e-echo",
+              "compute_ms": 12,
+              "wasted_ms": 0
+            },
             "result": {
               "from": "node-b"
             }
@@ -152,6 +159,13 @@
         "body": {
           "result": {
             "from": "node-b"
+          },
+          "usage": {
+            "served_from": "compute",
+            "tier": "cpu",
+            "engine": "e-echo",
+            "compute_ms": 12,
+            "wasted_ms": 0
           }
         }
       },

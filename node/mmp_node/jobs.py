@@ -34,6 +34,7 @@ class Job:
     result: object = None
     result_ref: dict | None = None
     agent_context: dict | None = None
+    usage: dict | None = None
     timings_ms: dict = field(default_factory=dict)
     engine_metrics: dict = field(default_factory=dict)  # A 内部观测，不进入 B/C 响应
     error: ApiError | None = None
@@ -72,6 +73,8 @@ class Job:
                 body["result"] = self.result
             if self.agent_context is not None:
                 body["agent_context"] = self.agent_context
+            if self.usage is not None:
+                body["usage"] = self.usage
             if self.timings_ms:
                 body["timings_ms"] = self.timings_ms
             return 200, body

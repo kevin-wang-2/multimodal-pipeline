@@ -201,6 +201,7 @@ class Scheduler:
         fallback_reason: str | None = None
         phase_timings: dict[str, int] = {}
         phase_metrics: dict[str, float] = {}
+        wasted_ms = 0
         try:
             media_path = await self._normalize_media(job)
             spec = self.registry.engine_for(job.task_type, job.tier["tier"])
@@ -221,6 +222,7 @@ class Scheduler:
                         if target is None or target.internal_source is None or target.run_vram_mb <= 0:
                             raise ApiError("engine_failed", f"invalid internal retry engine {res.retry.get('engine')!r}")
                         internal_retry_used = True
+                        wasted_ms += res.compute_ms
                         phase_timings.update({f"base_{k}": int(v) for k, v in res.timings_ms.items()})
                         phase_metrics.update({f"base_{k}": float(v) for k, v in (res.metrics or {}).items()})
                         reason = str(res.retry.get("reason") or "quality_failure")
@@ -231,7 +233,8 @@ class Scheduler:
                         degraded_reason = "partial_failure"
                         continue
                     break
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError as e:
+                    wasted_ms += int(getattr(e, "compute_ms", 0))
                     cheaper = self.registry.cheaper_tier(job.task_type, job.tier["tier"])
                     if cheaper is None:
                         raise ApiError("timeout", f"{job.task_type}@{job.tier['tier']} exceeded {spec.timeout_sec}s, no cheaper tier")
@@ -262,6 +265,8 @@ class Scheduler:
                 job.source["params"] = {**job.params, "fallback_reason": fallback_reason}
             if degraded_reason:
                 job.source["degraded_reason"] = degraded_reason
+            job.usage = {"served_from": "compute", "tier": job.source["tier"], "engine": job.source["engine"],
+                         "compute_ms": res.compute_ms, "wasted_ms": wasted_ms}
             result = self._finish_result(job, res.result)
             job.agent_context = self._agent_context(job, result)
             await self._place_result(job, result)
@@ -296,7 +301,7 @@ class Scheduler:
             self._wake.set()
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
                                  "tier": job.tier["tier"], "degraded": degraded_reason, "cached": False,
-                                 "timings_ms": job.timings_ms}, ensure_ascii=False))
+                                 "usage": job.usage, "timings_ms": job.timings_ms}, ensure_ascii=False))
 
     async def _normalize_media(self, job: Job):
         """声明 audio.to_wav_16k_mono 预处理的任务：非 PCM WAV 先归一化。"""

@@ -12,10 +12,16 @@ async def test_submit_wait_done_and_cached(stack):
     b = r.json()
     assert b["status"] == "done" and b["cached"] is False
     assert b["source"]["tier"] == "cpu" and b["source"]["degraded"] is False
+    assert b["usage"]["served_from"] == "compute"
+    assert b["usage"]["tier"] == "cpu" and b["usage"]["engine"] == "echo"
+    assert b["usage"]["compute_ms"] >= 0 and b["usage"]["wasted_ms"] == 0
     assert b["result"]["bytes"] == 2000 and b["result"]["media_id"] == b["media_id"]
 
     r2 = await stack.submit(type="echo", media=inline(blob()), params={"tag": "a"}, wait=5)
     assert r2.status_code == 200 and r2.json()["cached"] is True
+    assert r2.json()["usage"] == {"served_from": "cache", "tier": "cpu", "engine": "echo",
+                                  "compute_ms": 0, "wasted_ms": 0}
+    assert set(r2.json()["timings_ms"]) == {"fetch"}
     assert r2.json()["media_id"] == b["media_id"]
     assert r2.json()["job_id"] != b["job_id"]  # 新交付、新 id，结果来自缓存
 
@@ -120,6 +126,34 @@ async def test_engine_failure_and_timeout(tmp_path):
         # 引擎没被拖死：后面的任务照常
         r = await s.submit(type="echo", media=inline(blob(10)), params={"tag": "after"}, wait=5)
         assert r.status_code == 200
+    finally:
+        await s.client.aclose(); await s.link.close(); await s.node.close()
+
+
+async def test_timeout_fallback_records_final_compute_and_wasted_attempt(tmp_path):
+    from mmp_node.engine_io import EngineResult, EngineTimeout
+
+    s = await build_stack(tmp_path)
+    try:
+        cap = s.node.registry.types["echo"]
+        gpu = {"tier": "gpu", "engine": "echo-gpu", "engine_version": "1", "cost": "high",
+               "latency_hint": "test", "max_concurrency": 1}
+        cap["tiers"] = [gpu, *cap["tiers"]]
+        s.node.registry.type_engine[("echo", "gpu")] = "echo"
+
+        async def fake_run(_spec, job, _timeout, _vram):
+            if job["tier"] == "gpu":
+                raise EngineTimeout(37)
+            return EngineResult({"media_id": job["media_id"], "bytes": 10, "params": job["params"],
+                                 "started_at_ms": 1}, {}, compute_ms=11)
+
+        s.node.pool.run = fake_run
+        response = await s.submit(type="echo", tier="gpu", media=inline(blob(10)), wait=5)
+        body = response.json()
+        assert response.status_code == 200
+        assert body["source"]["tier"] == "cpu" and body["source"]["degraded_reason"] == "timeout"
+        assert body["usage"] == {"served_from": "compute", "tier": "cpu", "engine": "echo",
+                                 "compute_ms": 11, "wasted_ms": 37}
     finally:
         await s.client.aclose(); await s.link.close(); await s.node.close()
 

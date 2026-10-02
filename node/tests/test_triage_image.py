@@ -109,10 +109,10 @@ async def test_internal_large_stage_records_actual_source_and_cache(tmp_path):
         calls.append((spec.name, vram))
         if spec.name == "triage_image":
             return EngineResult(None, {"caption": 1}, {"engine": "triage_image_large",
-                                                       "reason": "description_nonempty"})
+                                                       "reason": "description_nonempty"}, compute_ms=7)
         digest, _ = build_digest(job["media_id"], "image/png", SURFACES, ["一张测试图片"],
                                  [RawRegion("image_0", "object", [1, 1, 20, 20], "phrase_grounding")], 0, .8, {})
-        return EngineResult(digest, {"caption": 2})
+        return EngineResult(digest, {"caption": 2}, compute_ms=13)
 
     stack.node.pool.run = fake_run
     media = {"inline": base64.b64encode(b"not-decoded-by-fake-engine").decode()}
@@ -123,9 +123,13 @@ async def test_internal_large_stage_records_actual_source_and_cache(tmp_path):
     assert body["result"]["source"]["tier"] == "gpu"
     assert body["result"]["source"]["engine"] == "florence-2-large-ft"
     assert body["result"]["source"]["params"]["fallback_reason"] == "description_nonempty"
+    assert body["usage"] == {"served_from": "compute", "tier": "gpu", "engine": "florence-2-large-ft",
+                             "compute_ms": 13, "wasted_ms": 7}
     assert body["agent_context"]["text"].startswith("[mmp:agent-context start]")
     second = await stack.submit(type="triage.image", media=media, wait=5)
     assert second.json()["cached"] is True
+    assert second.json()["usage"] == {"served_from": "cache", "tier": "gpu", "engine": "florence-2-large-ft",
+                                      "compute_ms": 0, "wasted_ms": 0}
     assert second.json()["result"]["source"] == body["result"]["source"]
     assert second.json()["agent_context"] == body["agent_context"]
     await stack.client.aclose(); await stack.link.close(); await stack.node.close()

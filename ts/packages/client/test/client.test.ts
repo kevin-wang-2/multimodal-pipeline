@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { describeCapability, matchesMediaType, MmpClient, MmpError, media, resolveCapability } from "../src/index.js";
+import type { Usage } from "../src/index.js";
 
 type Route = (req: { method: string; path: string; body: any; headers: Record<string, string> }) => { status: number; body?: unknown } | Promise<{ status: number; body?: unknown }>;
 
@@ -19,14 +20,17 @@ function fakeFetch(route: Route) {
 
 const JOB = "n1-01J7ZQ9K3W8B6Q4M2N1P5R7S9T";
 const MID = "sha256:" + "a".repeat(64);
+const usage: Usage = { served_from: "compute", tier: "cpu", engine: "e", compute_ms: 12, wasted_ms: 0 };
 const done = { job_id: JOB, type: "echo", status: "done", media_id: MID, cached: false,
-  source: { tier: "cpu", engine: "e", engine_version: "1", generated_at: "2026-09-21T00:00:00Z", degraded: false }, result: { ok: 1 } };
+  source: { tier: "cpu", engine: "e", engine_version: "1", generated_at: "2026-09-21T00:00:00Z", degraded: false },
+  usage, result: { ok: 1 } };
 
 test("submit sends auth + body and returns 200 body; media helpers build valid handles", async () => {
   const { f, calls } = fakeFetch(() => ({ status: 200, body: done }));
   const c = new MmpClient({ baseUrl: "https://b.example/", apiKey: "k", fetch: f });
   const r = await c.submit({ type: "echo", media: media.inline(new Uint8Array([1, 2, 3]), "audio/wav"), wait: 5 });
   assert.equal(r.status, "done");
+  assert.deepEqual(r.usage, usage);
   assert.equal(calls[0].path, "/jobs");
   assert.equal(calls[0].headers.authorization, "Bearer k");
   assert.deepEqual(calls[0].body.media, { inline: "AQID", content_type: "audio/wav" });

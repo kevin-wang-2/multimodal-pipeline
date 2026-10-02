@@ -26,12 +26,21 @@ class EngineCancelled(Exception):
     """引擎确认取消（error{cancelled}）。"""
 
 
+class EngineTimeout(asyncio.TimeoutError):
+    """run 已发出但未按时返回；compute_ms 是本次失败尝试实际占用引擎的时间。"""
+
+    def __init__(self, compute_ms: int):
+        super().__init__()
+        self.compute_ms = compute_ms
+
+
 @dataclass
 class EngineResult:
     result: object | None
     timings_ms: dict
     retry: dict | None = None
     metrics: dict | None = None
+    compute_ms: int = 0
 
 
 class EngineProcess:
@@ -160,14 +169,17 @@ class EngineProcess:
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending[rid] = fut
         self.last_used = time.monotonic()
+        compute_started = time.monotonic()
         await self._send({"type": "run", "id": rid, "job": {**job, "timeout_sec": timeout_sec}})
         try:
-            return await asyncio.wait_for(asyncio.shield(fut), timeout_sec)
+            result = await asyncio.wait_for(asyncio.shield(fut), timeout_sec)
+            result.compute_ms = int((time.monotonic() - compute_started) * 1000)
+            return result
         except asyncio.TimeoutError:
             self._pending.pop(rid, None)
             if self.alive:
                 await self._send({"type": "cancel", "id": rid})
-            raise
+            raise EngineTimeout(int((time.monotonic() - compute_started) * 1000)) from None
         except asyncio.CancelledError:
             # 调用方取消（DELETE）：告诉引擎，然后向上传播
             self._pending.pop(rid, None)

@@ -22,6 +22,7 @@ class Job:
     media: dict                   # 原始句柄；put 端点从这里取
     media_id: str
     media_path: Path | None
+    content_type: str | None       # 本次提交解析出的原始 MIME；能力发现区分 audio/* / video/*
     key: str
     seq: int
     created_at: float = field(default_factory=time.time)

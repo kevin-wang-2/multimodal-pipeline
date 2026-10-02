@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { matchesMediaType, MmpClient, MmpError, media, resolveCapability } from "../src/index.js";
+import { describeCapability, matchesMediaType, MmpClient, MmpError, media, resolveCapability } from "../src/index.js";
 
 type Route = (req: { method: string; path: string; body: any; headers: Record<string, string> }) => { status: number; body?: unknown } | Promise<{ status: number; body?: unknown }>;
 
@@ -100,4 +100,22 @@ test("capability resolution is generic across media families and fails explicitl
     (e: MmpError) => e.code === "unsupported_type");
   assert.throws(() => resolveCapability(response, { purpose: "triage", contentType: "model/gltf+json" }),
     (e: MmpError) => e.code === "unsupported_type");
+  assert.equal(describeCapability(response, "triage.image").input.media.accepts[0], "image/*");
+  assert.throws(() => describeCapability(response, "triage.video"),
+    (e: MmpError) => e.code === "unsupported_type");
+});
+
+test("describe fetches only on demand and leaves existing client calls unchanged", async () => {
+  const response = { protocol_version: "2.0", capabilities: [
+    { capability: { id: "ocr.structured", purpose: "ocr", description: "OCR", tiers: [],
+      input: { media: { presence: "required", accepts: ["image/*", "application/pdf"] },
+        params_schema: { type: "object", properties: { pages: { type: "array" } } } },
+      output: { schema: {}, agent_context: "none" } }, nodes: ["n1"] },
+  ] } as any;
+  const { f, calls } = fakeFetch(() => ({ status: 200, body: response }));
+  const c = new MmpClient({ baseUrl: "https://b.example", fetch: f });
+  assert.equal((await c.describe("ocr.structured")).description, "OCR");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, "/capabilities");
+  await assert.rejects(c.describe("missing"), (e: MmpError) => e.code === "unsupported_type");
 });

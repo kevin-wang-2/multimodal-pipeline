@@ -108,6 +108,74 @@ class Registry:
     def capabilities(self) -> list[dict]:
         return list(self.types.values())
 
+    @staticmethod
+    def _matches_media_type(pattern: str, content_type: str) -> bool:
+        actual = content_type.split(";", 1)[0].strip().lower()
+        accepted = pattern.lower()
+        return (accepted == "*/*" and "/" in actual) or accepted == actual or (
+            accepted.endswith("/*") and actual.startswith(accepted[:-1])
+        )
+
+    @staticmethod
+    def _digest_labels(digest: dict) -> set[str]:
+        return {
+            str(label["tag"]).casefold()
+            for segment in digest.get("segments", [])
+            for label in segment.get("labels", [])
+            if isinstance(label, dict) and label.get("tag")
+        }
+
+    @staticmethod
+    def _has_granularity(digest: dict, granularity: str | None) -> bool:
+        if granularity in (None, "whole"):
+            return True
+        if granularity == "segment":
+            return digest.get("kind") == "audio" and bool(digest.get("segments"))
+        if granularity == "region":
+            return digest.get("kind") == "image" and bool(digest.get("regions"))
+        if granularity == "page":
+            return digest.get("kind") == "image" and any(
+                surface.get("kind") == "page" for surface in digest.get("surfaces", [])
+            )
+        return False
+
+    def capabilities_for_digest(self, digest: dict, content_type: str | None = None) -> list[str]:
+        """按原始 MIME 与预检事实筛选显式能力；不在此替 Harness 推断调用意图。"""
+        if digest.get("kind") == "image":
+            media_type = digest.get("format")
+        elif digest.get("kind") == "audio":
+            media_type = content_type or "audio/unknown"
+        else:
+            return []
+        if not isinstance(media_type, str):
+            return []
+
+        labels = self._digest_labels(digest)
+        available: list[str] = []
+        for cap in self.types.values():
+            if cap.get("purpose") in {"triage", "diagnostic"}:
+                continue
+            accepts = cap.get("input", {}).get("media", {}).get("accepts", [])
+            if not any(self._matches_media_type(pattern, media_type) for pattern in accepts):
+                continue
+            consumes = cap.get("consumes") or {}
+            wanted_labels = {str(label).casefold() for label in consumes.get("labels", [])}
+            if wanted_labels and labels.isdisjoint(wanted_labels):
+                continue
+            if not self._has_granularity(digest, consumes.get("granularity")):
+                continue
+            available.append(cap["id"])
+        return sorted(available)
+
+    def populate_capabilities_available(self, result: object, content_type: str | None = None) -> bool:
+        """把注册表派生信息覆盖进 digest，返回内容是否变化。"""
+        if not isinstance(result, dict) or result.get("kind") not in {"audio", "image"}:
+            return False
+        available = self.capabilities_for_digest(result, content_type)
+        changed = result.get("capabilities_available") != available
+        result["capabilities_available"] = available
+        return changed
+
     def result_schema(self, task_type: str):
         return self.capability(task_type)["output"]["schema"]
 

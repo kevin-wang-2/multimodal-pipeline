@@ -1,6 +1,6 @@
 {
   "name": "@mmp/client",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "multimodal-pipeline 的通用调用节点（C）客户端：任务传输、按 purpose + Content-Type 发现能力、透传 agent context。",
   "license": "Apache-2.0",

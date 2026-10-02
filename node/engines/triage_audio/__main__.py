@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from engines.common.io import BadParams, log, serve
-from engines.triage_audio import CAPABILITIES_AVAILABLE, ENGINE, ENGINE_VERSION, PARAMS_SCHEMA
+from engines.triage_audio import ENGINE, ENGINE_VERSION, PARAMS_SCHEMA
 from engines.triage_audio.audio import SR, UnsupportedAudio, read_wav_16k
 from engines.triage_audio.digest import RawSegment, build_digest, timeline
 from engines.triage_audio.vad import SileroVad, VadParams, speech_segments
@@ -86,7 +86,7 @@ def triage(m: Models, media_id: str, path: str, params: dict) -> dict:
     duration = len(x) / SR
     if duration == 0:
         return build_digest(media_id, 0.0, [], {"vad": "skipped", "audio_tagging": "skipped", "asr": "skipped"},
-                            th, [], {}) | {"gaps": ["媒体时长为 0，无任何内容"]}
+                            th, {}) | {"gaps": ["媒体时长为 0，无任何内容"]}
 
     # 1) VAD
     t0 = time.monotonic()
@@ -156,7 +156,7 @@ def triage(m: Models, media_id: str, path: str, params: dict) -> dict:
         tools["asr"] = "skipped"
     timings["asr"] = int((time.monotonic() - t0) * 1000)
 
-    return build_digest(media_id, duration, segs, tools, th, CAPABILITIES_AVAILABLE, timings)
+    return build_digest(media_id, duration, segs, tools, th, timings)
 
 
 async def run(job: dict, cancelled: asyncio.Event) -> tuple[object, dict]:

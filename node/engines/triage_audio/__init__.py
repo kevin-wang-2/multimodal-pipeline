@@ -8,10 +8,6 @@ from .presentation import render_agent_context
 ENGINE = "silero-vad+sensevoice-int8+zipformer-tagging-int8"
 ENGINE_VERSION = "2026-09-21b"         # 模型组合或后处理规则变了就改；进缓存键。21b：asr.confidence=打标 Speech 分数、VAD 漏检由打标补救、不猜原因
 
-# M2 之前先给固定清单（T4 盲测用的那 7 项）；M2 起由注册表按媒体特征筛。
-CAPABILITIES_AVAILABLE = ["pitch_transcribe", "chord_recognize", "source_separate",
-                          "denoise", "speaker_id", "music_id", "transcribe_segment"]
-
 PARAMS_SCHEMA = {
     "type": "object",
     "properties": {

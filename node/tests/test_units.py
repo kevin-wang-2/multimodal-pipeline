@@ -6,7 +6,7 @@ from mmp_node.cache import params_hash, task_key
 from mmp_node.config import apply_env, load_config
 from mmp_node.engine_io import EnginePool, EngineResult
 from mmp_node.ids import new_job_id, node_of, ulid
-from mmp_node.registry import EngineSpec
+from mmp_node.registry import EngineSpec, Registry
 
 
 def test_ulid_and_job_id():
@@ -24,6 +24,40 @@ def test_params_hash_is_canonical():
     assert params_hash({"a": 1}) != params_hash({"a": 2})
     k = task_key("sha256:" + "0" * 64, "echo", "cpu", "1", {})
     assert k.startswith("sha256:") and k.count("|") == 4
+    assert task_key("m", "t", "cpu", "1", {}, "Audio/WAV; codecs=pcm") == task_key(
+        "m", "t", "cpu", "1", {}, "audio/wav"
+    )
+
+
+def test_registry_filters_available_capabilities_by_media_facts():
+    registry = Registry.__new__(Registry)
+
+    def cap(id_: str, purpose: str, accepts: list[str], consumes: dict | None = None) -> dict:
+        out = {"id": id_, "purpose": purpose, "input": {"media": {"accepts": accepts}}}
+        if consumes is not None:
+            out["consumes"] = consumes
+        return out
+
+    registry.types = {
+        "triage.audio": cap("triage.audio", "triage", ["audio/*", "video/*"]),
+        "echo": cap("echo", "diagnostic", ["*/*"]),
+        "transcribe.segment": cap("transcribe.segment", "asr", ["audio/*", "video/*"],
+                                  {"labels": ["Speech"], "granularity": "segment"}),
+        "pitch.segment": cap("pitch.segment", "pitch", ["audio/*"],
+                             {"labels": ["Humming", "Music"], "granularity": "segment"}),
+        "ocr.structured": cap("ocr.structured", "ocr", ["image/*", "application/pdf"]),
+        "inspect.region": cap("inspect.region", "visual.inspect", ["image/*"], {"granularity": "region"}),
+        "inspect.page": cap("inspect.page", "visual.inspect", ["image/*"], {"granularity": "page"}),
+    }
+    audio = {"kind": "audio", "segments": [{"labels": [{"tag": "Speech", "score": .9}]}]}
+    assert registry.capabilities_for_digest(audio, "video/mp4") == ["transcribe.segment"]
+    assert registry.capabilities_for_digest(audio, "audio/wav") == ["transcribe.segment"]
+
+    image = {"kind": "image", "format": "image/png", "surfaces": [{"kind": "image"}],
+             "regions": [{"id": "region_0"}]}
+    assert registry.capabilities_for_digest(image) == ["inspect.region", "ocr.structured"]
+    image["surfaces"] = [{"kind": "page"}]
+    assert registry.capabilities_for_digest(image) == ["inspect.page", "inspect.region", "ocr.structured"]
 
 
 def test_env_override(tmp_path):

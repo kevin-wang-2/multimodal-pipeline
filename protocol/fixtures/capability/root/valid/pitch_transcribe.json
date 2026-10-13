@@ -53,5 +53,6 @@
       }
     },
     "agent_context": "none"
-  }
+  },
+  "visibility": "public"
 }

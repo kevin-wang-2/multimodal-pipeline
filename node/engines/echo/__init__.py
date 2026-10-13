@@ -6,6 +6,7 @@ ENGINE_VERSION = "1"
 CAPABILITIES = [
     {
         "id": "echo",
+        "visibility": "public",
         "purpose": "diagnostic",
         "description": "测试用：返回媒体 hash 与参数，不做任何推理。",
         "tiers": [

@@ -23,5 +23,6 @@
       "type": "object"
     },
     "agent_context": "none"
-  }
+  },
+  "visibility": "public"
 }

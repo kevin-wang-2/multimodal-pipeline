@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import time
@@ -50,7 +51,7 @@ class Node:
         usable = self.cfg.scheduler.vram_total_mb - self.cfg.scheduler.vram_headroom_mb
         if usable < 0:
             raise ValueError("scheduler.vram_headroom_mb exceeds vram_total_mb")
-        for cap in self.registry.capabilities():
+        for cap in self.registry.capabilities(include_internal=True):
             for t in cap["tiers"]:
                 if t.get("vram_mb", 0) > usable:
                     raise ValueError(f"{cap['id']}@{t['tier']} needs {t['vram_mb']} MiB VRAM > usable VRAM={usable}")
@@ -86,9 +87,11 @@ class Node:
                     del self.jobs[jid]
 
     # ---- 任务操作（协议.md §0.1 的五个操作里归 A 的三个）----
-    async def submit(self, req: dict, wait: float | None = None) -> tuple[int, dict]:
+    async def submit(self, req: dict, wait: float | None = None, *, bound: bool = False) -> tuple[int, dict]:
         task_type = req["type"]
         cap = self.registry.capability(task_type)
+        if cap["visibility"] == "internal" and not bound:
+            raise ApiError("unsupported_type", f"unknown task type {task_type!r}")
         tier = self.registry.resolve_tier(task_type, req.get("tier"))
         params = self._normalize_params(cap, req.get("params") or {})
         self._validate_params(cap, params)
@@ -103,30 +106,27 @@ class Node:
         cache_content_type = (fetched.content_type
                               if cap["output"]["schema"] == schemas.DIGEST_ID else None)
         key = task_key(fetched.media_id, task_type, tier["tier"], tier["engine_version"], params,
-                       cache_content_type)
+                       cache_content_type, bound=bound)
 
         hit = self.cache.get(key)
-        if hit is not None and cap["output"]["agent_context"] == "required" and hit.get("result") is None:
+        if hit is not None and hit.get("result") is None:
             hit = None
         if hit is not None:
             job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, None,
-                                fetched.content_type, key)
+                                fetched.content_type, key, bound)
             job.cached, job.source = True, hit["source"]
-            job.result, job.result_ref = hit.get("result"), hit.get("result_ref")
             job.timings_ms = {"fetch": fetch_ms}
             job.usage = {"served_from": "cache", "tier": job.source["tier"], "engine": job.source["engine"],
                          "compute_ms": 0, "wasted_ms": 0}
-            if job.result is not None:
-                capabilities_changed = self.registry.populate_capabilities_available(job.result, job.content_type)
-                job.agent_context = self.sched._agent_context(job, job.result)
-                if capabilities_changed and job.result_ref is not None:
-                    job.result_ref = None
-                    result, job.result = job.result, None
-                    await self.sched._place_result(job, result)
-                if capabilities_changed:
-                    self.cache.put(key, job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                                   job.source, job.result if job.result is not None else hit.get("result"),
-                                   job.result_ref, job.timings_ms)
+            result = hit["result"]
+            capabilities_changed = self.registry.populate_capabilities_available(
+                result, job.content_type, include_internal=bound)
+            job.agent_context = self.sched._agent_context(job, result)
+            # 缓存保存计算结果；交付始终使用本次请求的 PUT 地址和内联上限。
+            await self.sched._place_result(job, result)
+            if capabilities_changed:
+                self.cache.put(key, job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
+                               job.source, result, job.result_ref, job.timings_ms)
             job.finish("done")
             self.jobs[job.job_id] = job
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
@@ -135,13 +135,13 @@ class Node:
                                 ensure_ascii=False))
             return job.response()
 
-        active = self.sched.find_active(key)     # 同键合并：返回已有 job
+        active = self.sched.find_active(key, req["media"].get("put"))
         if active is not None:
             await active.wait(wait_s)
             return active.response()
 
         job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, fetched.path,
-                            fetched.content_type, key)
+                            fetched.content_type, key, bound)
         job.timings_ms["fetch"] = fetch_ms       # ref 命中时 ≈ 0：这就是"没重复拉"的证据
         self.jobs[job.job_id] = job
         self.media.pin(job.media_id)          # 排队 / 运行期间不许被 LRU 淘汰；scheduler 收尾时 unpin
@@ -153,29 +153,39 @@ class Node:
         await job.wait(wait_s)
         return job.response()
 
-    async def get(self, job_id: str, wait: float = 0) -> tuple[int, dict]:
-        job = self._job(job_id)
+    async def get(self, job_id: str, wait: float = 0, *, bound: bool = False) -> tuple[int, dict]:
+        job = self._job(job_id, bound=bound)
         await job.wait(wait)
-        return job.response()
+        return self._response(job, bound=bound)
 
-    async def cancel(self, job_id: str, wait: float = 0) -> tuple[int, dict]:
-        job = self._job(job_id)
+    async def cancel(self, job_id: str, wait: float = 0, *, bound: bool = False) -> tuple[int, dict]:
+        job = self._job(job_id, bound=bound)
         if not job.terminal:
             self.sched.cancel(job)
             await job.wait(wait)
-        return job.response()
+        return self._response(job, bound=bound)
 
-    def _job(self, job_id: str) -> Job:
+    def _response(self, job: Job, *, bound: bool) -> tuple[int, dict]:
+        status, body = job.response()
+        if not bound and job.bound and isinstance(body.get("result"), dict):
+            body = copy.deepcopy(body)
+            if self.registry.populate_capabilities_available(body["result"], job.content_type):
+                context = self.sched._agent_context(job, body["result"])
+                if context is not None:
+                    body["agent_context"] = context
+        return status, body
+
+    def _job(self, job_id: str, *, bound: bool) -> Job:
         job = self.jobs.get(job_id)
-        if job is None:
+        if job is None or (not bound and self.registry.capability(job.task_type)["visibility"] == "internal"):
             raise ApiError("not_found", f"unknown job {job_id}")
         return job
 
-    def _new_job(self, task_type, priority, tier, params, media, media_id, media_path, content_type, key) -> Job:
+    def _new_job(self, task_type, priority, tier, params, media, media_id, media_path, content_type, key, bound) -> Job:
         self._seq += 1
         return Job(job_id=new_job_id(self.node_id), task_type=task_type, priority=priority, tier=tier, params=params,
                    media=media, media_id=media_id, media_path=media_path, content_type=content_type,
-                   key=key, seq=self._seq)
+                   key=key, seq=self._seq, bound=bound)
 
     @staticmethod
     def _normalize_params(cap: dict, params: dict) -> dict:
@@ -217,31 +227,33 @@ class Node:
         return {"type": type_, "protocol_version": PROTOCOL_VERSION,
                 "ts": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"), "payload": payload}
 
-    def register_message(self, key: str | None = None) -> dict:
+    def register_message(self, key: str | None = None, *, bound: bool = False) -> dict:
         return self.envelope("register", {
             "node_id": self.node_id, "node_key": key or self.cfg.node.key,
-            "capabilities": self.registry.capabilities(), "engine_versions": self.registry.engine_versions(),
+            "capabilities": self.registry.capabilities(include_internal=bound),
+            "engine_versions": self.registry.engine_versions(include_internal=bound),
         })
 
-    def heartbeat_message(self, vram_free_mb: int | None = None) -> dict:
+    def heartbeat_message(self, vram_free_mb: int | None = None, *, bound: bool = False) -> dict:
         p = {"node_id": self.node_id, "queue_len": self.sched.queue_len, "running": self.sched.running,
-             "engines_loaded": self.pool.loaded()}
+             "engines_loaded": [name for name in self.pool.loaded() if bound or any(
+                 cap["visibility"] == "public" for cap in self.registry.engines[name].capabilities)]}
         if vram_free_mb is not None:
             p["vram_free_mb"] = vram_free_mb
         elif self.cfg.scheduler.vram_total_mb:
             p["vram_free_mb"] = self.cfg.scheduler.vram_total_mb - self.sched._vram_used
         return self.envelope("heartbeat", p)
 
-    async def dispatch(self, request: dict) -> dict:
+    async def dispatch(self, request: dict, *, bound: bool = False) -> dict:
         """RequestPayload → ResponsePayload。任何 ApiError 变成 (http_status, ErrorBody)，绝不抛出。"""
         try:
             op = request["op"]
             if op == "submit":
-                status, body = await self.submit(request["job"])
+                status, body = await self.submit(request["job"], bound=bound)
             elif op == "get":
-                status, body = await self.get(request["job_id"], float(request.get("wait", 0)))
+                status, body = await self.get(request["job_id"], float(request.get("wait", 0)), bound=bound)
             elif op == "cancel":
-                status, body = await self.cancel(request["job_id"], float(request.get("wait", 0)))
+                status, body = await self.cancel(request["job_id"], float(request.get("wait", 0)), bound=bound)
             else:
                 raise ApiError("bad_request", f"unknown op {op!r}")
         except ApiError as e:

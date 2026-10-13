@@ -14,8 +14,10 @@ def params_hash(params: dict) -> str:
 
 
 def task_key(media_id: str, task_type: str, tier: str, engine_version: str, params: dict,
-             content_type: str | None = None) -> str:
+             content_type: str | None = None, *, bound: bool = False) -> str:
     base = f"{media_id}|{task_type}|{tier}|{engine_version}|{params_hash(params)}"
+    if bound:
+        base += "|bound"
     if content_type is None:
         return base
     context = content_type.split(";", 1)[0].strip().lower()

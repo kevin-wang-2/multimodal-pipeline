@@ -198,6 +198,31 @@ async def test_large_result_goes_to_put(stack, media_server):
     assert r.status_code == 500 and r.json()["error"] == "engine_failed"
 
 
+async def test_large_cached_result_is_delivered_to_current_put(stack, media_server):
+    import json
+    media = {**inline(blob(50)), "put": media_server.put_endpoint("/first.json")}
+    first = await stack.submit(type="echo", media=media, params={"pad_bytes": 10000}, wait=5)
+    assert first.json()["status"] == "done"
+    second = await stack.submit(type="echo", media={**media, "put": media_server.put_endpoint("/second.json")},
+                                params={"pad_bytes": 10000}, wait=5)
+    assert second.json()["cached"] is True
+    assert json.loads(media_server.puts["/first.json"]) == json.loads(media_server.puts["/second.json"])
+    # 没有输出端点时，不能沿用上一次上传的摘要伪造交付成功。
+    missing = await stack.submit(type="echo", media=inline(blob(50)), params={"pad_bytes": 10000}, wait=5)
+    assert missing.status_code == 500 and missing.json()["error"] == "engine_failed"
+
+
+async def test_inflight_results_with_different_puts_have_separate_jobs(stack, media_server):
+    media = {**inline(blob(51)), "put": media_server.put_endpoint("/a.json")}
+    first = await stack.submit(type="echo", media=media, params={"sleep_ms": 100, "pad_bytes": 10000})
+    second = await stack.submit(type="echo", media={**media, "put": media_server.put_endpoint("/b.json")},
+                                params={"sleep_ms": 100, "pad_bytes": 10000})
+    assert first.json()["job_id"] != second.json()["job_id"]
+    assert (await stack.finish(first.json()["job_id"]))["status"] == "done"
+    assert (await stack.finish(second.json()["job_id"]))["status"] == "done"
+    assert media_server.puts["/a.json"] and media_server.puts["/b.json"]
+
+
 async def test_capabilities_and_health(stack):
     r = await stack.client.get("/capabilities")
     assert_valid(V_CAPS, r.json())

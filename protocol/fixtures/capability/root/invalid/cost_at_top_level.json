@@ -41,5 +41,6 @@
   "output": {
     "schema": "urn:mmp:protocol:2:digest",
     "agent_context": "required"
-  }
+  },
+  "visibility": "public"
 }

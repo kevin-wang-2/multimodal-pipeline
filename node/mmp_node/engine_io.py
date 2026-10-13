@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -202,7 +203,15 @@ class EngineProcess:
 
     async def kill(self) -> None:
         if self.proc is not None and self.proc.returncode is None:
-            self.proc.kill()
+            if sys.platform == "win32":
+                # venv 的 python.exe 是启动器，实际模型可能在子进程；一起回收才能释放显存。
+                killer = await asyncio.create_subprocess_exec(
+                    "taskkill", "/PID", str(self.proc.pid), "/T", "/F",
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                )
+                await killer.wait()
+            if self.proc.returncode is None:
+                self.proc.kill()
             await self.proc.wait()
         await self._cleanup()
 

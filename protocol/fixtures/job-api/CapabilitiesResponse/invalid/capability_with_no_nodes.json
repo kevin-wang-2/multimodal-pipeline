@@ -44,7 +44,8 @@
         "output": {
           "schema": "urn:mmp:protocol:1:digest",
           "agent_context": "required"
-        }
+        },
+        "visibility": "public"
       },
       "nodes": []
     }

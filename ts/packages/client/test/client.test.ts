@@ -94,8 +94,8 @@ test("run: 202 then polls until done; wait honours timeout and cancelled", async
 
 test("capability resolution is generic across media families and fails explicitly", () => {
   const response = { protocol_version: "2.0", capabilities: [
-    { capability: { id: "triage.audio", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
-    { capability: { id: "triage.image", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
+    { capability: { id: "triage.audio", visibility: "public", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
+    { capability: { id: "triage.image", visibility: "public", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n1"] },
   ] } as any;
   assert.equal(matchesMediaType("image/*", "Image/PNG; charset=binary"), true);
   assert.equal(resolveCapability(response, { purpose: "triage", contentType: "video/mp4" }).id, "triage.audio");
@@ -111,7 +111,7 @@ test("capability resolution is generic across media families and fails explicitl
 
 test("describe fetches only on demand and leaves existing client calls unchanged", async () => {
   const response = { protocol_version: "2.0", capabilities: [
-    { capability: { id: "ocr.structured", purpose: "ocr", description: "OCR", tiers: [],
+    { capability: { id: "ocr.structured", visibility: "public", purpose: "ocr", description: "OCR", tiers: [],
       input: { media: { presence: "required", accepts: ["image/*", "application/pdf"] },
         params_schema: { type: "object", properties: { pages: { type: "array" } } } },
       output: { schema: {}, agent_context: "none" } }, nodes: ["n1"] },

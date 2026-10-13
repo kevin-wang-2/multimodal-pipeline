@@ -25,6 +25,7 @@ class Job:
     content_type: str | None       # 本次提交解析出的原始 MIME；能力发现区分 audio/* / video/*
     key: str
     seq: int
+    bound: bool = False           # 由绑定 / WS 连接确定，客户端不能指定
     created_at: float = field(default_factory=time.time)
     status: str = "queued"
     started_at: float | None = None

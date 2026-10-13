@@ -95,9 +95,9 @@ class Scheduler:
         if self.queue_len >= self.cfg.queue.max_len:
             raise ApiError("backpressure", f"queue full ({self.queue_len})", retry_after_sec=self.cfg.queue.retry_after_sec)
 
-    def find_active(self, key: str) -> Job | None:
+    def find_active(self, key: str, put: dict | None) -> Job | None:
         for j in list(self._queued.values()) + list(self._running.values()):
-            if j.key == key:
+            if j.key == key and j.media.get("put") == put:
                 return j
         return None
 
@@ -270,14 +270,12 @@ class Scheduler:
             result = self._finish_result(job, res.result)
             job.agent_context = self._agent_context(job, result)
             await self._place_result(job, result)
-            cache_result = (result if self.registry.capability(job.task_type)["output"]["agent_context"] != "none"
-                            else job.result)
             cache_content_type = (job.content_type
                                   if self.registry.result_schema(job.task_type) == schemas.DIGEST_ID else None)
             self.cache.put(task_key(job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                                    job.params, cache_content_type),
+                                    job.params, cache_content_type, bound=job.bound),
                            job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                           job.source, cache_result, job.result_ref, job.timings_ms)
+                           job.source, result, job.result_ref, job.timings_ms)
             job.finish("done")
             self._durations[(job.tier["engine"], job.tier["tier"])] = (
                 0.7 * self._durations.get((job.tier["engine"], job.tier["tier"]), (time.monotonic() - t0)) + 0.3 * (time.monotonic() - t0))
@@ -332,7 +330,7 @@ class Scheduler:
                 job.source["degraded"] = True
                 job.source["degraded_reason"] = "partial_failure"
             result["source"] = job.source
-            self.registry.populate_capabilities_available(result, job.content_type)
+            self.registry.populate_capabilities_available(result, job.content_type, include_internal=job.bound)
         v = schemas.validator_for(out_schema)
         if v is not None:
             errs = schemas.errors(v, result)

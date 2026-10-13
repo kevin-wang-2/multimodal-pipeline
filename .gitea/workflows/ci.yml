@@ -83,6 +83,8 @@ jobs:
       MMP_OCR_PYTHON: C:\ProgramData\miniconda3\envs\ocrlab\python.exe
       MMP_OCR_INVOICES: C:\mmp\invoices
       MMP_IMAGE_PYTHON: C:\mmp\envs\vision-spike-venv\Scripts\python.exe
+      MMP_KREA_PYTHON: C:\mmp\envs\krea2\Scripts\python.exe
+      MMP_COMFY_ROOT: C:\ai\krea2\ComfyUI
       MMP_FLORENCE_BASE: C:\mmp\cache\vision-spike\models\Florence-2-base-ft-native
       MMP_FLORENCE_LARGE: C:\mmp\cache\vision-spike\models\Florence-2-large-ft-native
       MMP_SMOKE_IMAGES: C:\mmp\testdata\images
@@ -142,6 +144,9 @@ jobs:
           @echo off
           %MMP_OCR_PYTHON% node\engines\ocr_structured\setup_env.py verify --env ocrlab || exit /b 1
           %PY_NODE% node\tools\smoke_ocr_structured.py || exit /b 1
+      - name: image.generate real-model smoke and resource recovery
+        shell: cmd
+        run: '%PY_NODE% node\tools\smoke_image_generate.py || exit /b 1'
 
   deploy-node:
     needs: [unit, smoke]

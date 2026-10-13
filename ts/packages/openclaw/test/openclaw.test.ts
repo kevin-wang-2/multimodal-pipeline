@@ -57,7 +57,7 @@ test("triage: capability discovery → generic context passthrough; over-limit m
   const context = "[mmp:agent-context start]\n音频上下文\n[mmp:agent-context end]";
   const done = { job_id: "n-01J7ZQ9K3W8B6Q4M2N1P5R7S9T", type: "triage.audio", status: "done", media_id: MID, cached: false, source: digest.source, result: digest,
     agent_context: { format: "mmp-agent-context-v1", content_type: "text/plain; charset=utf-8", text: context } };
-  const capabilities = { protocol_version: "2.0", capabilities: [{ capability: { id: "triage.audio", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n"] }] };
+  const capabilities = { protocol_version: "2.0", capabilities: [{ capability: { id: "triage.audio", visibility: "public", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n"] }] };
   const { f, calls } = fakeFetch((url) => url.endsWith("/capabilities") ? { status: 200, body: capabilities } : { status: 200, body: done });
   const cfg = { baseUrl: "http://b", apiKey: "k", waitSec: 30, maxInlineBytes: 100 };
   const out = await triageBytes(makeClient(cfg, f), new Uint8Array(50), "audio/mp4", cfg);
@@ -73,7 +73,7 @@ test("triage: capability discovery → generic context passthrough; over-limit m
 test("triage: image uses the discovered task without client modality code", async () => {
   const done = { job_id: "n-01J7ZQ9K3W8B6Q4M2N1P5R7S9T", type: "triage.image", status: "done", media_id: MID, cached: false, source: digest.source, result: {},
     agent_context: { format: "mmp-agent-context-v1", content_type: "text/plain; charset=utf-8", text: "image context" } };
-  const capabilities = { protocol_version: "2.0", capabilities: [{ capability: { id: "triage.image", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n"] }] };
+  const capabilities = { protocol_version: "2.0", capabilities: [{ capability: { id: "triage.image", visibility: "public", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n"] }] };
   const { f, calls } = fakeFetch((url) => url.endsWith("/capabilities") ? { status: 200, body: capabilities } : { status: 200, body: done });
   const cfg = { baseUrl: "http://b", maxInlineBytes: 100 };
   const out = await triageBytes(makeClient(cfg, f), new Uint8Array(10), "image/png", cfg);

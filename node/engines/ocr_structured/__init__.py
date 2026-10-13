@@ -74,6 +74,7 @@ OUTPUT_SCHEMA = {
 CAPABILITIES = [
     {
         "id": "ocr.structured",
+        "visibility": "public",
         "purpose": "ocr",
         "description": "文档 OCR。gpu-fast：PP-OCRv6 文本行 + 每页质量信号（低置信行占比、覆盖率）；gpu：PaddleOCR-VL 版面结构（Markdown、表格、印章等元素标签），只对需要的页用。",
         "tiers": [

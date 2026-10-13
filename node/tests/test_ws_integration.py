@@ -327,7 +327,7 @@ async def test_broker_rejects_non_register_first_frame(tmp_path):
             assert e.value.rcvd.code == 4003
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws", proxy=None) as ws:
             await ws.send(json.dumps({"type": "register", "protocol_version": "3.0", "ts": "2026-09-21T00:00:00Z",
-                                      "payload": {"node_id": "x", "node_key": KEY, "capabilities": [{"id": "echo", "purpose": "diagnostic",
+                                      "payload": {"node_id": "x", "node_key": KEY, "capabilities": [{"id": "echo", "visibility": "public", "purpose": "diagnostic",
                                                   "tiers": [{"tier": "cpu", "engine": "e", "engine_version": "1", "cost": "low"}],
                                                   "input": {"media": {"presence": "required", "accepts": ["*/*"]}},
                                                   "output": {"schema": {"type": "object"}, "agent_context": "none"}}], "engine_versions": {}}}))

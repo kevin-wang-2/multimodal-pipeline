@@ -74,7 +74,11 @@ export class Broker {
     if (!p.node_id || !Array.isArray(p.capabilities) || p.capabilities.length === 0) {
       throw new RegisterRejected(4003, "register missing node_id or capabilities");
     }
-    const link: NodeLink = { nodeId: p.node_id, send, capabilities: p.capabilities, engineVersions: p.engine_versions ?? {}, connectedSince: this.now() };
+    const capabilities: Capability[] = p.capabilities.filter((c: Capability) => c.visibility === "public");
+    if (capabilities.length === 0) throw new RegisterRejected(4003, "register has no visible capabilities");
+    const engines = new Set(capabilities.flatMap((c) => c.tiers.map((t) => t.engine)));
+    const engineVersions = Object.fromEntries(Object.entries(p.engine_versions ?? {}).filter(([name]) => engines.has(name))) as Record<string, string>;
+    const link: NodeLink = { nodeId: p.node_id, send, capabilities, engineVersions, connectedSince: this.now() };
     if (this.nodes.has(link.nodeId)) this.log(`node ${link.nodeId} re-registered, replacing old link`);
     this.nodes.set(link.nodeId, link);
     return link;

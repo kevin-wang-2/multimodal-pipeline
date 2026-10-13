@@ -17,6 +17,7 @@ PARAMS_SCHEMA = {
 
 CAPABILITIES = [{
     "id": "triage.image",
+    "visibility": "public",
     "purpose": "triage",
     "description": "图片预检：全图详细描述、描述短语定位与对象检测，输出带像素锚点的任务无关视觉索引。",
     "tiers": [{

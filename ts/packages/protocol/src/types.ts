@@ -325,13 +325,17 @@ export interface RegisterPayload {
   };
 }
 /**
- * 任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，register 时整表上报；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。
+ * 任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，绑定 B 接收整表，远端 B 只接收 public 能力；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。
  */
 export interface Capability {
   /**
    * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
    */
   id: string;
+  /**
+   * public 能力可发布给远端 B；internal 能力只向 provider 绑定的 B 发布和执行。此字段不判断调用者网络来源。
+   */
+  visibility: "public" | "internal";
   /**
    * 稳定的能力意图；客户端用 purpose + Content-Type 发现任务，不依赖任务 id 或封闭模态枚举。
    */

@@ -60,7 +60,7 @@ class Broker:
         self.now = now   # 可注入的时钟：契约场景用它拨快心跳超时
 
     # ---- A 侧消息进入 ----
-    def on_register(self, envelope: dict, send: SendFn) -> NodeLink:
+    def on_register(self, envelope: dict, send: SendFn, *, bound: bool = False) -> NodeLink:
         if envelope.get("type") != "register":
             raise RegisterRejected(4003, "first message must be register")
         if str(envelope.get("protocol_version", "")).split(".")[0] != self.protocol_version.split(".")[0]:
@@ -70,8 +70,14 @@ class Broker:
             raise RegisterRejected(4001, "bad node_key")
         if not p.get("node_id") or not p.get("capabilities"):
             raise RegisterRejected(4003, "register missing node_id or capabilities")
-        link = NodeLink(node_id=p["node_id"], send=send, capabilities=p["capabilities"],
-                        engine_versions=p.get("engine_versions") or {}, connected_since=self.now())
+        capabilities = [cap for cap in p["capabilities"] if bound or cap["visibility"] == "public"]
+        if not capabilities:
+            raise RegisterRejected(4003, "register has no visible capabilities")
+        engines = {tier["engine"] for cap in capabilities for tier in cap["tiers"]}
+        versions = {name: version for name, version in (p.get("engine_versions") or {}).items()
+                    if name in engines}
+        link = NodeLink(node_id=p["node_id"], send=send, capabilities=capabilities,
+                        engine_versions=versions, connected_since=self.now())
         old = self.nodes.get(link.node_id)
         if old is not None:
             log.info("node %s re-registered, replacing old link", link.node_id)

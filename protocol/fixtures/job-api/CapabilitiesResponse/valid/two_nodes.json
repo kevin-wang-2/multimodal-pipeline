@@ -1,5 +1,5 @@
 {
-  "protocol_version": "2.0",
+  "protocol_version": "3.0",
   "capabilities": [
     {
       "capability": {
@@ -15,16 +15,11 @@
             "max_concurrency": 2
           }
         ],
-        "input": {
-          "media": {
-            "presence": "required",
-            "accepts": [
-              "audio/*",
-              "video/*"
-            ],
-            "preprocessor": "audio.to_wav_16k_mono"
-          },
-          "params_schema": {
+        "input": { "fields": [
+          { "name": "media", "kind": "media", "required": true,
+            "accepts": ["audio/*", "video/*"], "cardinality": { "min": 1, "max": 1 },
+            "preprocessor": "audio.to_wav_16k_mono" },
+          { "name": "options", "kind": "json", "required": false, "schema": {
             "type": "object",
             "properties": {
               "label_confidence_threshold": {
@@ -38,13 +33,12 @@
               }
             },
             "additionalProperties": false
-          }
-        },
+          } }
+        ] },
         "purpose": "triage",
-        "output": {
-          "schema": "urn:mmp:protocol:1:digest",
-          "agent_context": "required"
-        },
+        "output": { "fields": [
+          { "name": "digest", "kind": "json", "required": true, "schema": "urn:mmp:protocol:3:digest" }
+        ], "agent_context": "required" },
         "visibility": "public"
       },
       "nodes": [
@@ -76,15 +70,10 @@
             "max_concurrency": 1
           }
         ],
-        "input": {
-          "media": {
-            "presence": "required",
-            "accepts": [
-              "image/*",
-              "application/pdf"
-            ]
-          },
-          "params_schema": {
+        "input": { "fields": [
+          { "name": "media", "kind": "media", "required": true,
+            "accepts": ["image/*", "application/pdf"], "cardinality": { "min": 1, "max": 1 } },
+          { "name": "options", "kind": "json", "required": false, "schema": {
             "type": "object",
             "properties": {
               "pages": {
@@ -95,11 +84,11 @@
                 }
               }
             }
-          }
-        },
+          } }
+        ] },
         "purpose": "ocr",
-        "output": {
-          "schema": {
+        "output": { "fields": [
+          { "name": "document", "kind": "json", "required": true, "schema": {
             "type": "object",
             "properties": {
               "pages": {
@@ -109,9 +98,8 @@
             "required": [
               "pages"
             ]
-          },
-          "agent_context": "none"
-        },
+          } }
+        ], "agent_context": "none" },
         "visibility": "public"
       },
       "nodes": [

@@ -10,14 +10,16 @@ const c = new MmpClient({ baseUrl: "https://mmp.example.com", apiKey: process.en
 // 客户端不知道具体模态和任务 id；用稳定 purpose + MIME 发现能力。
 const capability = await c.resolveCapability({ purpose: "triage", contentType: attachment.type });
 const done = await c.run(
-  { type: capability.id, media: media.inline(bytes, attachment.type) },
+  { type: capability.id, arguments: { media: media.inline(bytes, attachment.type) } },
   { pollWaitSec: 30 },
 );
 prompt = done.agent_context!.text + "\n\n" + userMessage; // 任务端生成，client 只透传
 
 // 同一媒体的后续任务用 ref：A 本地有就不再上传 / 下载
-const ocr = await c.describe("ocr.structured"); // 仅在准备调用时拉这一项的 params schema
-await c.run({ type: ocr.id, media: media.ref(done.media_id), tier: "gpu", params: { pages: [2] } });
+const ocr = await c.describe("ocr.structured"); // 仅在准备调用时拉这一项的 fields 契约
+await c.run({ type: ocr.id, arguments: {
+  media: media.ref(done.media_ids.media as string), options: { pages: [2] }
+}, tier: "gpu" });
 ```
 
 ## API
@@ -28,10 +30,10 @@ await c.run({ type: ocr.id, media: media.ref(done.media_id), tier: "gpu", params
 | `get(jobId, waitSec?)` / `cancel(jobId, waitSec?)` | `GET` / `DELETE /jobs/{id}` |
 | `capabilities()` / `health()` | B 的注册表汇总 / 在线节点 |
 | `resolveCapability({purpose, contentType})` | 读取注册表并选出唯一匹配能力；未知或歧义显式抛错 |
-| `describe(id)` | 按 id 取得一项能力的说明、params schema、档位和输出契约 |
+| `describe(id)` | 按 id 取得一项能力的命名 input/output fields、说明和档位 |
 | `wait(jobId, {timeoutMs, pollWaitSec, signal})` | 轮询到 `done`；`failed` / `cancelled` 抛错 |
 | `run(job, opts)` | `submit` + `wait` |
-| `media.inline / get / ref / refOr / withPut` | 媒体句柄构造（协议.md §5） |
+| `media.inline / get / ref / refOr` | 媒体输入句柄构造（协议.md §5）；输出 PUT 使用 `job.delivery` |
 | `matchesMediaType(pattern, contentType)` / `resolveCapability(response, query)` / `describeCapability(response, id)` | 纯函数形式的 MIME 匹配、能力解析与按名描述 |
 
 ### 错误

@@ -33,9 +33,13 @@ CAPABILITIES = [
             {"tier": "cpu", "engine": ENGINE, "engine_version": ENGINE_VERSION, "cost": "low",
              "latency_hint": "~0.05x realtime on 4 CPU threads", "max_concurrency": 1},
         ],
-        "input": {"media": {"presence": "required", "accepts": ["audio/*", "video/*"],
-                            "preprocessor": "audio.to_wav_16k_mono"}, "params_schema": PARAMS_SCHEMA},
-        "output": {"schema": "urn:mmp:protocol:2:digest", "agent_context": "required"},
+        "input": {"fields": [
+            {"name": "media", "kind": "media", "required": True, "accepts": ["audio/*", "video/*"],
+             "cardinality": {"min": 1, "max": 1}, "preprocessor": "audio.to_wav_16k_mono"},
+            {"name": "options", "kind": "json", "required": False, "schema": PARAMS_SCHEMA},
+        ]},
+        "output": {"fields": [{"name": "digest", "kind": "json", "required": True,
+                                  "schema": "urn:mmp:protocol:3:digest"}], "agent_context": "required"},
     }
 ]
 

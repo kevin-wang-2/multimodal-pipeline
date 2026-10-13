@@ -10,7 +10,7 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "protocol" / "schemas"
-DIGEST_ID = "urn:mmp:protocol:2:digest"
+DIGEST_ID = "urn:mmp:protocol:3:digest"
 
 
 @lru_cache(maxsize=1)

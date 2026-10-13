@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:2:capability",
+  "$id": "urn:mmp:protocol:3:capability",
   "title": "Capability",
   "description": "任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，绑定 B 接收整表，远端 B 只接收 public 能力；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。",
   "type": "object",
@@ -48,45 +48,22 @@
     "input": {
       "type": "object",
       "properties": {
-        "media": {
-          "description": "媒体输入声明。accepts 是开放的 MIME 匹配器，可用 audio/* 或 */*，同一能力可接受多种媒体。",
-          "type": "object",
-          "properties": {
-            "presence": { "type": "string", "enum": ["required", "optional", "none"] },
-            "accepts": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^(\\*/\\*|[a-z0-9!#$&^_.+-]+/(\\*|[a-z0-9!#$&^_.+-]+))$"
-              },
-              "uniqueItems": true
-            },
-            "preprocessor": {
-              "description": "A 侧可选预处理器 id；调用方不应解释此字段。",
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
-            }
-          },
-          "required": ["presence", "accepts"],
-          "additionalProperties": false
-        },
-        "params_schema": {
-          "description": "params 的 JSON Schema（内联）。省略表示不接受任何 params。",
-          "type": "object"
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InputField" },
+          "minItems": 1
         }
       },
-      "required": ["media"],
+      "required": ["fields"],
       "additionalProperties": false
     },
     "output": {
       "type": "object",
       "properties": {
-        "schema": {
-          "description": "结果的 schema：本协议内 schema 的 $id，或内联 JSON Schema。",
-          "oneOf": [
-            { "type": "string", "pattern": "^urn:mmp:protocol:[0-9]+:[a-z0-9-]+(#.*)?$" },
-            { "type": "object" }
-          ]
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputField" },
+          "minItems": 1
         },
         "agent_context": {
           "description": "该任务是否生成可直接交给基础模型的通用 agent context。",
@@ -94,7 +71,7 @@
           "enum": ["required", "optional", "none"]
         }
       },
-      "required": ["schema", "agent_context"],
+      "required": ["fields", "agent_context"],
       "additionalProperties": false
     }
   },
@@ -111,6 +88,109 @@
       "description": "引擎档位。cpu 便宜档常开；gpu-fast 快档；gpu 慢档 / 重模型；remote 由 A 转调外部服务。",
       "type": "string",
       "enum": ["cpu", "gpu-fast", "gpu", "remote"]
+    },
+    "FieldName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "Cardinality": {
+      "type": "object",
+      "properties": {
+        "min": { "type": "integer", "minimum": 0, "default": 0 },
+        "max": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["min", "max"],
+      "additionalProperties": false
+    },
+    "InputField": {
+      "oneOf": [
+        { "$ref": "#/$defs/TextInputField" },
+        { "$ref": "#/$defs/JsonInputField" },
+        { "$ref": "#/$defs/MediaInputField" }
+      ]
+    },
+    "TextInputField": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/FieldName" }, "kind": { "const": "text" },
+        "required": { "type": "boolean" }, "description": { "type": "string", "maxLength": 500 },
+        "schema": { "type": "object" }
+      },
+      "required": ["name", "kind", "required", "schema"],
+      "additionalProperties": false
+    },
+    "JsonInputField": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/FieldName" }, "kind": { "const": "json" },
+        "required": { "type": "boolean" }, "description": { "type": "string", "maxLength": 500 },
+        "schema": { "type": "object" }
+      },
+      "required": ["name", "kind", "required", "schema"],
+      "additionalProperties": false
+    },
+    "MediaInputField": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/FieldName" }, "kind": { "const": "media" },
+        "required": { "type": "boolean" }, "description": { "type": "string", "maxLength": 500 },
+        "accepts": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(\\*/\\*|[a-z0-9!#$&^_.+-]+/(\\*|[a-z0-9!#$&^_.+-]+))$" },
+          "minItems": 1, "uniqueItems": true
+        },
+        "cardinality": { "$ref": "#/$defs/Cardinality" },
+        "preprocessor": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$" }
+      },
+      "required": ["name", "kind", "required", "accepts", "cardinality"],
+      "additionalProperties": false
+    },
+    "OutputField": {
+      "oneOf": [
+        { "$ref": "#/$defs/TextOutputField" },
+        { "$ref": "#/$defs/JsonOutputField" },
+        { "$ref": "#/$defs/MediaOutputField" }
+      ]
+    },
+    "TextOutputField": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/FieldName" }, "kind": { "const": "text" },
+        "required": { "type": "boolean" }, "description": { "type": "string", "maxLength": 500 },
+        "schema": { "type": "object" }
+      },
+      "required": ["name", "kind", "required", "schema"],
+      "additionalProperties": false
+    },
+    "JsonOutputField": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/FieldName" }, "kind": { "const": "json" },
+        "required": { "type": "boolean" }, "description": { "type": "string", "maxLength": 500 },
+        "schema": {
+          "oneOf": [
+            { "type": "string", "pattern": "^urn:mmp:protocol:3:[a-z0-9-]+(#.*)?$" },
+            { "type": "object" }
+          ]
+        }
+      },
+      "required": ["name", "kind", "required", "schema"],
+      "additionalProperties": false
+    },
+    "MediaOutputField": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/FieldName" }, "kind": { "const": "media" },
+        "required": { "type": "boolean" }, "description": { "type": "string", "maxLength": 500 },
+        "produces": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9!#$&^_.+-]+/(\\*|[a-z0-9!#$&^_.+-]+)$" },
+          "minItems": 1, "uniqueItems": true
+        },
+        "cardinality": { "$ref": "#/$defs/Cardinality" }
+      },
+      "required": ["name", "kind", "required", "produces", "cardinality"],
+      "additionalProperties": false
     },
     "TierSpec": {
       "type": "object",

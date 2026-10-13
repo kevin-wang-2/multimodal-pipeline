@@ -7,13 +7,16 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import heapq
+import hashlib
 import json
 import logging
 import time
 from datetime import datetime, timezone
 
-from .cache import ResultCache, task_key
+from .cache import ResultCache
 from .config import Config
 from .engine_io import EngineCancelled, EngineCrashed, EnginePool
 from .errors import ApiError
@@ -60,7 +63,7 @@ class Scheduler:
         self._stopping = True
         offline = ApiError("node_offline", "node is shutting down")
         for job in list(self._queued.values()):
-            self.media.unpin(job.media_id)
+            self._unpin(job)
             job.finish("failed", offline)
         self._queued.clear()
         self._heap.clear()
@@ -95,9 +98,9 @@ class Scheduler:
         if self.queue_len >= self.cfg.queue.max_len:
             raise ApiError("backpressure", f"queue full ({self.queue_len})", retry_after_sec=self.cfg.queue.retry_after_sec)
 
-    def find_active(self, key: str, put: dict | None) -> Job | None:
+    def find_active(self, key: str, delivery: dict) -> Job | None:
         for j in list(self._queued.values()) + list(self._running.values()):
-            if j.key == key and j.media.get("put") == put:
+            if j.key == key and j.delivery == delivery:
                 return j
         return None
 
@@ -114,7 +117,7 @@ class Scheduler:
             self._heap = [e for e in self._heap if e[2] != job.job_id]
             heapq.heapify(self._heap)
             self._refresh_positions()
-            self.media.unpin(job.media_id)
+            self._unpin(job)
             job.finish("cancelled")
         elif job.job_id in self._running:
             job.cancel_requested = True
@@ -203,15 +206,13 @@ class Scheduler:
         phase_metrics: dict[str, float] = {}
         wasted_ms = 0
         try:
-            media_path = await self._normalize_media(job)
+            await self._normalize_media(job)
             spec = self.registry.engine_for(job.task_type, job.tier["tier"])
             while True:
                 run_job = {"job_id": job.job_id, "task_type": job.task_type, "tier": job.tier["tier"],
-                           "media_id": job.media_id, "params": job.params}
+                           "arguments": job.arguments}
                 if fallback_reason:
                     run_job["internal"] = {"fallback_reason": fallback_reason}
-                if media_path is not None:
-                    run_job["media_path"] = str(media_path)
                 stage_vram = self._vram_reservations.get(job.job_id, job.tier.get("vram_mb", 0))
                 try:
                     res = await self.pool.run(spec, run_job, spec.timeout_sec, stage_vram)
@@ -248,34 +249,36 @@ class Scheduler:
             if internal_retry_used:
                 phase_timings.update({f"large_{k}": v for k, v in final_timings.items()})
                 final_timings = phase_timings
-                if isinstance(res.result, dict):
-                    res.result["timings_ms"] = dict(final_timings)
+                if isinstance(res.outputs, dict):
+                    for output in res.outputs.values():
+                        if isinstance(output, dict) and output.get("kind") == "json" and isinstance(output.get("value"), dict):
+                            output["value"]["timings_ms"] = dict(final_timings)
                 phase_metrics.update({f"large_{k}": float(v) for k, v in (res.metrics or {}).items()})
             else:
                 phase_metrics.update({k: float(v) for k, v in (res.metrics or {}).items()})
             job.engine_metrics.update(phase_metrics)
             job.timings_ms.update(final_timings)
             job.timings_ms["total"] = int((time.monotonic() - t0) * 1000)
+            media_fields = {field["name"] for field in self.registry.capability(job.task_type)["input"]["fields"]
+                            if field["kind"] == "media"}
             job.source = {
                 "tier": job.tier["tier"], "engine": job.tier["engine"], "engine_version": job.tier["engine_version"],
-                "generated_at": _now_iso(), "degraded": degraded_reason is not None, "params": job.params,
+                "generated_at": _now_iso(), "degraded": degraded_reason is not None,
+                "arguments": {name: value for name, value in job.arguments.items() if name not in media_fields},
             }
             if actual_source:
                 job.source.update(actual_source)
-                job.source["params"] = {**job.params, "fallback_reason": fallback_reason}
+                job.source["arguments"] = {**job.source["arguments"], "fallback_reason": fallback_reason}
             if degraded_reason:
                 job.source["degraded_reason"] = degraded_reason
             job.usage = {"served_from": "compute", "tier": job.source["tier"], "engine": job.source["engine"],
                          "compute_ms": res.compute_ms, "wasted_ms": wasted_ms}
-            result = self._finish_result(job, res.result)
-            job.agent_context = self._agent_context(job, result)
-            await self._place_result(job, result)
-            cache_content_type = (job.content_type
-                                  if self.registry.result_schema(job.task_type) == schemas.DIGEST_ID else None)
-            self.cache.put(task_key(job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                                    job.params, cache_content_type, bound=job.bound),
-                           job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                           job.source, result, job.result_ref, job.timings_ms)
+            raw_outputs = self._finish_outputs(job, res.outputs or {})
+            job.raw_outputs = raw_outputs
+            job.agent_context = self._agent_context(job, raw_outputs)
+            self.cache.put(job.key, job.media_ids, job.task_type, job.tier["tier"], job.tier["engine_version"],
+                           job.source, raw_outputs, job.timings_ms)
+            await self._place_outputs(job, raw_outputs)
             job.finish("done")
             self._durations[(job.tier["engine"], job.tier["tier"])] = (
                 0.7 * self._durations.get((job.tier["engine"], job.tier["tier"]), (time.monotonic() - t0)) + 0.3 * (time.monotonic() - t0))
@@ -295,68 +298,142 @@ class Scheduler:
         finally:
             self._release(job)
             self._running.pop(job.job_id, None)
-            self.media.unpin(job.media_id)
+            self._unpin(job)
             self._wake.set()
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
                                  "tier": job.tier["tier"], "degraded": degraded_reason, "cached": False,
                                  "usage": job.usage, "timings_ms": job.timings_ms}, ensure_ascii=False))
 
-    async def _normalize_media(self, job: Job):
-        """声明 audio.to_wav_16k_mono 预处理的任务：非 PCM WAV 先归一化。"""
-        if job.media_path is None or not self.cfg.media.transcode_audio:
-            return job.media_path
-        media = self.registry.capability(job.task_type)["input"]["media"]
-        if media.get("preprocessor") != "audio.to_wav_16k_mono" or not transcode.needs_transcode(job.media_path):
-            return job.media_path
-        dst = self.media.derived_path(job.media_id, "16k.wav")
-        if dst.exists():
-            job.timings_ms["transcode"] = 0
-            return dst
-        ffmpeg = transcode.find_ffmpeg(self.cfg.media.ffmpeg)
-        if ffmpeg is None:
-            raise ApiError("bad_request", "audio is not PCM WAV and this node has no ffmpeg to transcode it; submit 16 kHz mono WAV")
-        t0 = time.monotonic()
-        await transcode.to_wav16k(job.media_path, dst, ffmpeg, self.cfg.media.transcode_timeout_sec)
-        job.timings_ms["transcode"] = int((time.monotonic() - t0) * 1000)
-        log.info("transcoded %s → %s in %d ms", job.media_id, dst.name, job.timings_ms["transcode"])
-        return dst
+    async def _normalize_media(self, job: Job) -> None:
+        """对声明 audio.to_wav_16k_mono 的每个媒体字段做预处理。"""
+        if not self.cfg.media.transcode_audio:
+            return
+        fields = {field["name"]: field for field in self.registry.capability(job.task_type)["input"]["fields"]}
+        for name, field in fields.items():
+            if field["kind"] != "media" or field.get("preprocessor") != "audio.to_wav_16k_mono":
+                continue
+            values = job.arguments.get(name)
+            items = values if isinstance(values, list) else [values]
+            for item in [item for item in items if isinstance(item, dict)]:
+                path = item.get("path")
+                if not path or not transcode.needs_transcode(path):
+                    continue
+                dst = self.media.derived_path(item["media_id"], "16k.wav")
+                if dst.exists():
+                    job.timings_ms[f"transcode.{name}"] = 0
+                else:
+                    ffmpeg = transcode.find_ffmpeg(self.cfg.media.ffmpeg)
+                    if ffmpeg is None:
+                        raise ApiError("bad_request", "audio is not PCM WAV and this node has no ffmpeg to transcode it; submit 16 kHz mono WAV")
+                    t0 = time.monotonic()
+                    await transcode.to_wav16k(path, dst, ffmpeg, self.cfg.media.transcode_timeout_sec)
+                    job.timings_ms[f"transcode.{name}"] = int((time.monotonic() - t0) * 1000)
+                item["path"] = str(dst)
 
-    def _finish_result(self, job: Job, result: object) -> object:
-        """digest 类型：A 补 source、按 tools 判部分失败；所有类型：按 output.schema 校验。"""
-        out_schema = self.registry.result_schema(job.task_type)
-        if out_schema == schemas.DIGEST_ID and isinstance(result, dict):
-            tools = result.get("tools") or {}
-            if any(v in ("failed", "partial") for v in tools.values()) and not job.source["degraded"]:
-                job.source["degraded"] = True
-                job.source["degraded_reason"] = "partial_failure"
-            result["source"] = job.source
-            self.registry.populate_capabilities_available(result, job.content_type, include_internal=job.bound)
-        v = schemas.validator_for(out_schema)
-        if v is not None:
-            errs = schemas.errors(v, result)
-            if errs:
-                raise ApiError("engine_failed", f"engine output violates {out_schema if isinstance(out_schema, str) else 'output.schema'}: " + "; ".join(errs[:3]))
-        return result
+    def _finish_outputs(self, job: Job, outputs: dict) -> dict:
+        """校验命名输出；digest 在 A 补来源与可用能力。"""
+        fields = {field["name"]: field for field in self.registry.capability(job.task_type)["output"]["fields"]}
+        if extra := set(outputs) - set(fields):
+            raise ApiError("engine_failed", f"engine returned unknown outputs {sorted(extra)}")
+        for name, field in fields.items():
+            if field["required"] and name not in outputs:
+                raise ApiError("engine_failed", f"engine omitted required output {name!r}")
+            if name not in outputs:
+                continue
+            output = outputs[name]
+            many = field["kind"] == "media" and field["cardinality"]["max"] != 1
+            if many and not isinstance(output, list):
+                raise ApiError("engine_failed", f"engine output {name!r} must be an array")
+            values = output if many and isinstance(output, list) else [output]
+            if many and not field["cardinality"]["min"] <= len(values) <= field["cardinality"]["max"]:
+                raise ApiError("engine_failed", f"engine output {name!r} violates media cardinality")
+            if not many and isinstance(output, list):
+                raise ApiError("engine_failed", f"engine output {name!r} must be scalar")
+            if not all(isinstance(value, dict) and value.get("kind") == field["kind"] for value in values):
+                raise ApiError("engine_failed", f"engine output {name!r} has wrong kind")
+            if field["kind"] == "json":
+                value = output.get("value")
+                out_schema = field["schema"]
+                if out_schema == schemas.DIGEST_ID and isinstance(value, dict):
+                    tools = value.get("tools") or {}
+                    if any(v in ("failed", "partial") for v in tools.values()) and not job.source["degraded"]:
+                        job.source["degraded"] = True
+                        job.source["degraded_reason"] = "partial_failure"
+                    value["source"] = job.source
+                    content_type = next((v for v in job.media_content_types.values() if isinstance(v, str)), None)
+                    self.registry.populate_capabilities_available(value, content_type, include_internal=job.bound)
+                validator = schemas.validator_for(out_schema)
+                if validator is not None:
+                    errs = schemas.errors(validator, value)
+                    if errs:
+                        raise ApiError("engine_failed", f"engine output {name!r} violates schema: " + "; ".join(errs[:3]))
+            elif field["kind"] == "text":
+                if not isinstance(output.get("text"), str):
+                    raise ApiError("engine_failed", f"engine output {name!r} must contain text")
+                validator = schemas.validator_for(field["schema"])
+                if validator is not None:
+                    errs = schemas.errors(validator, output["text"])
+                    if errs:
+                        raise ApiError("engine_failed", f"engine output {name!r} violates schema: " + "; ".join(errs[:3]))
+            elif field["kind"] == "media":
+                if any(not any(self.registry._matches_media_type(pattern, value.get("content_type", ""))
+                               for pattern in field["produces"]) or
+                       not isinstance(value.get("data_base64"), str) for value in values):
+                    raise ApiError("engine_failed", f"engine output {name!r} has invalid media payload")
+        return outputs
 
-    def _agent_context(self, job: Job, result: object) -> dict | None:
-        context = self.registry.present_agent_context(job.task_type, result)
+    def _agent_context(self, job: Job, outputs: dict) -> dict | None:
+        value = next((output.get("value") for output in outputs.values()
+                      if isinstance(output, dict) and output.get("kind") == "json"), None)
+        context = self.registry.present_agent_context(job.task_type, value)
         if context is None:
             return None
-        v = schemas.validator_for_ref("urn:mmp:protocol:2:job-api#/$defs/AgentContext")
+        v = schemas.validator_for_ref("urn:mmp:protocol:3:job-api#/$defs/AgentContext")
         errs = schemas.errors(v, context)
         if errs:
             raise ApiError("engine_failed", "agent_context violates protocol: " + "; ".join(errs[:3]))
         return context
 
-    async def _place_result(self, job: Job, result: object) -> None:
-        """结果内联；超限且有 put 端点则 PUT 过去只留引用。"""
-        blob = json.dumps(result, ensure_ascii=False).encode()
-        put = job.media.get("put")
-        if len(blob) <= self.cfg.media.max_inline_result_bytes or put is None:
+    async def _place_outputs(self, job: Job, outputs: dict) -> None:
+        """把 engine media payload 交付到调用方 PUT 或转换为受限内联值。"""
+        public: dict = {}
+        for name, output in outputs.items():
+            field = next(field for field in self.registry.capability(job.task_type)["output"]["fields"]
+                         if field["name"] == name)
+            if field["kind"] != "media":
+                public[name] = output
+                continue
+            many = field["cardinality"]["max"] != 1
+            values = output if many else [output]
+            endpoints = job.delivery.get(name)
+            if endpoints is not None and not many:
+                endpoints = [endpoints]
+            if endpoints is not None and len(endpoints) != len(values):
+                raise ApiError("bad_request", f"delivery.{name} must contain one endpoint per media output")
+            placed = []
+            for index, value in enumerate(values):
+                placed.append(await self._place_media(name, value, None if endpoints is None else endpoints[index]))
+            public[name] = placed if many else placed[0]
+        job.outputs = public
+
+    async def _place_media(self, name: str, output: dict, endpoint: dict | None) -> dict:
+        """交付一个 media atom，并剥离只允许存在于 A/cache 内部的 data_base64。"""
+        try:
+            blob = base64.b64decode(output["data_base64"], validate=True)
+        except (binascii.Error, ValueError) as e:
+            raise ApiError("engine_failed", f"engine output {name!r} is not valid base64") from e
+        descriptor = {"kind": "media", "content_type": output["content_type"], "bytes": len(blob),
+                      "sha256": hashlib.sha256(blob).hexdigest()}
+        if endpoint is not None:
+            await self.media.put(endpoint, blob, output["content_type"])
+            descriptor["delivered"] = True
+        else:
             if len(blob) > self.cfg.media.max_inline_result_bytes:
-                raise ApiError("engine_failed", f"result is {len(blob)} bytes > inline limit and no put endpoint given")
-            job.result = result
-            return
-        import hashlib
-        await self.media.put(put, blob, "application/json")
-        job.result_ref = {"content_type": "application/json", "bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()}
+                raise ApiError("engine_failed", f"media output {name!r} is {len(blob)} bytes > inline limit and has no delivery endpoint")
+            descriptor["inline"] = output["data_base64"]
+        return descriptor
+
+    def _unpin(self, job: Job) -> None:
+        for value in job.media_ids.values():
+            for media_id in value if isinstance(value, list) else [value]:
+                self.media.unpin(media_id)

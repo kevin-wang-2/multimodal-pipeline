@@ -21,15 +21,10 @@
       "max_concurrency": 1
     }
   ],
-  "input": {
-    "media": {
-      "presence": "required",
-      "accepts": [
-        "image/*",
-        "application/pdf"
-      ]
-    },
-    "params_schema": {
+  "input": { "fields": [
+    { "name": "media", "kind": "media", "required": true,
+      "accepts": ["image/*", "application/pdf"], "cardinality": { "min": 1, "max": 1 } },
+    { "name": "options", "kind": "json", "required": false, "schema": {
       "type": "object",
       "properties": {
         "pages": {
@@ -40,11 +35,11 @@
           }
         }
       }
-    }
-  },
+    } }
+  ] },
   "purpose": "ocr",
-  "output": {
-    "schema": {
+  "output": { "fields": [
+    { "name": "document", "kind": "json", "required": true, "schema": {
       "type": "object",
       "properties": {
         "pages": {
@@ -54,8 +49,7 @@
       "required": [
         "pages"
       ]
-    },
-    "agent_context": "none"
-  },
+    } }
+  ], "agent_context": "none" },
   "visibility": "public"
 }

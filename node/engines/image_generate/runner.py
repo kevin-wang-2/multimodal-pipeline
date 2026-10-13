@@ -12,15 +12,12 @@ from engines.image_generate import PARAMS_SCHEMA
 
 
 def request(job: dict) -> tuple[str, dict]:
+    arguments = job.get("arguments") or {}
     params = {k: v["default"] for k, v in PARAMS_SCHEMA["properties"].items()}
-    params.update(job.get("params") or {})
+    params.update(arguments.get("options") or {})
     if params["width"] * params["height"] > 1048576:
         raise ValueError("width * height must not exceed 1048576 pixels")
-    raw = Path(job["media_path"]).read_bytes()
-    try:
-        prompt = raw.decode("utf-8").strip()
-    except UnicodeDecodeError as e:
-        raise ValueError("prompt must be UTF-8 text") from e
+    prompt = str(arguments.get("prompt") or "").strip()
     if not prompt or len(prompt) > 4000:
         raise ValueError("prompt must contain 1 to 4000 characters")
     return prompt, params

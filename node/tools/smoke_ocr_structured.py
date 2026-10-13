@@ -2,7 +2,7 @@
 """ocr.structured 真模型冒烟（GPU 机 / CI gpu job）。起 A + 进程内 B，两个引擎（ocr_structured、triage_audio），检查 S5 验收：
 
 1. T5 的发票（MMP_OCR_INVOICES 下每个子目录：p-001.png + _gt.txt）快档字段全对：发票号码 / 开票日期 / 价税合计 / 合计金额
-2. 结果 PUT 回句柄：把内联上限压到很小，结果必须走 result_ref，PUT 上来的内容过 output.schema
+2. 命名 JSON 输出：结果从 outputs.document 取出并通过 output.schema
 3. VL（tier=gpu）并发 2 提交：第二个排队而不是 OOM，两个都完成且有 markdown / elements
 4. M1 定义第 4 条：批量 OCR 排队中，交互式 triage.audio 仍按时完成
 5. 升级触发：每页有 flags / suggest_upgrade_pages 字段（信号是否触发取决于素材，只检查存在与类型）
@@ -18,9 +18,7 @@ import json
 import os
 import re
 import sys
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 NODE_DIR = Path(__file__).resolve().parents[1]
@@ -85,19 +83,7 @@ def find(pats: list[str], text: str):
     return None
 
 
-class _Put(BaseHTTPRequestHandler):
-    puts: dict[str, bytes] = {}
-
-    def log_message(self, *a):
-        pass
-
-    def do_PUT(self):
-        n = int(self.headers.get("Content-Length", "0"))
-        _Put.puts[self.path] = self.rfile.read(n)
-        self.send_response(201); self.end_headers()
-
-
-def cfg(tmp: Path, inline_limit: int) -> Config:
+def cfg(tmp: Path) -> Config:
     engines = {"ocr_structured": {"module": "engines.ocr_structured", "timeout_sec": 240, "python": os.environ["MMP_OCR_PYTHON"],
                                   "env": {"PADDLE_PDX_MODEL_SOURCE": "modelscope"}}}
     if os.environ.get("MMP_ENGINE_PYTHON") and os.environ.get("MMP_MODELS_DIR"):
@@ -106,7 +92,7 @@ def cfg(tmp: Path, inline_limit: int) -> Config:
     return Config.model_validate({
         "node": {"id": "smoke-ocr", "key": KEY, "data_dir": str(tmp)},
         "scheduler": {"vram_total_mb": 16303, "engine_start_timeout_sec": 900, "idle_unload_sec": 3600},
-        "media": {"max_inline_result_bytes": inline_limit, "use_env_proxy": False},
+        "media": {"use_env_proxy": False},
         "engines": engines,
     })
 
@@ -123,28 +109,15 @@ async def main() -> int:
     if len(invoices) < 3:
         print(f"need >=3 invoices under {inv_root}, found {len(invoices)}"); return 1
 
-    node = Node(cfg(NODE_DIR / ".smoke-cache-ocr", inline_limit=4096), NODE_DIR)
+    node = Node(cfg(NODE_DIR / ".smoke-cache-ocr"), NODE_DIR)
     await node.start()
     broker = Broker(KEY)
     link = InProcLink(node, broker)
     await link.connect()
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Put)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    put_base = f"http://127.0.0.1:{httpd.server_address[1]}"
     vout = Draft202012Validator(OUTPUT_SCHEMA)
 
-    put_paths: dict[str, str] = {}
-    n_put = [0]
-
-    async def submit(**job):
-        # 所有提交都给 put 端点：内联上限压到 4 KB，结果必然走 result_ref，顺带验"结果 PUT 回句柄"
-        n_put[0] += 1
-        path = f"/out/{n_put[0]}.json"
-        job["media"] = {**job["media"], "put": {"url": put_base + path}}
-        st, body = await broker.submit(job)
-        if "job_id" in body:
-            put_paths[body["job_id"]] = path
-        return st, body
+    async def submit(job: dict):
+        return await broker.submit(job)
 
     async def finish(job_id: str, timeout: float = 600) -> tuple[int, dict]:
         deadline = time.monotonic() + timeout
@@ -155,29 +128,20 @@ async def main() -> int:
         raise AssertionError(f"{job_id} did not finish in {timeout}s")
 
     def fetched_result(body: dict) -> dict:
-        if "result" in body:
-            return body["result"]
-        ref = body["result_ref"]
-        blob = _Put.puts[urlpath_of(body)]
-        assert len(blob) == ref["bytes"], "PUT size mismatch"
-        return json.loads(blob)
-
-    def urlpath_of(body: dict) -> str:
-        return put_paths[body["job_id"]]
+        return body["outputs"]["document"]["value"]
 
     try:
-        # ---- 1 + 2：发票快档字段（结果强制走 PUT）----
+        # ---- 1 + 2：发票快档字段 + 命名 JSON 输出 ----
         t_first = time.monotonic()
         first_job_ids: list[str] = []
         for d in invoices:
-            st, body = await submit(type="ocr.structured", media=inline(d / "p-001.png"), params={"lang": "ch"}, wait=120)
+            st, body = await submit({"type": "ocr.structured", "arguments": {
+                "media": inline(d / "p-001.png"), "options": {"lang": "ch"}}, "wait": 120})
             wall = int((time.monotonic() - t_first) * 1000)
             print(f"\n=== {d.name} → HTTP {st} ({wall} ms wall)")
             if st != 200:
                 print(json.dumps(body, ensure_ascii=False)[:800]); failures.append(f"{d.name}: HTTP {st}"); continue
             first_job_ids.append(body["job_id"])
-            if "result_ref" not in body:
-                failures.append(f"{d.name}: expected result_ref (inline limit 4096), got inline result")
             res = fetched_result(body)
             errs = [f"{'/'.join(map(str, e.path))}: {e.message}" for e in vout.iter_errors(res)]
             if errs:
@@ -202,10 +166,12 @@ async def main() -> int:
         from PIL import Image
         rot = Image.open(invoices[0] / "p-001.png").convert("RGB").rotate(3, resample=Image.BICUBIC, expand=True, fillcolor="white")
         buf = BytesIO(); rot.save(buf, format="PNG")
-        st, body = await submit(type="ocr.structured", media={"inline": base64.b64encode(buf.getvalue()).decode()}, wait=120)
+        st, body = await submit({"type": "ocr.structured", "arguments": {
+            "media": {"inline": base64.b64encode(buf.getvalue()).decode()}}, "wait": 120})
         if st == 200:
             page = fetched_result(body)["pages"][0]
-            base_chars = json.loads(_Put.puts[put_paths[first_job_ids[0]]])["pages"][0]["quality"]["chars"]
+            first_body = (await broker.get(first_job_ids[0]))[1]
+            base_chars = fetched_result(first_body)["pages"][0]["quality"]["chars"]
             ratio = page["quality"]["chars"] / max(1, base_chars)
             print(f"  chars {page['quality']['chars']} vs upright {base_chars} ({ratio:.2f}), mean_score={page['quality'].get('mean_score')} "
                   f"coverage={page['quality'].get('coverage')} flags={page['flags']}")
@@ -220,8 +186,10 @@ async def main() -> int:
         print("\n=== VL tier=gpu, 2 concurrent submits")
         a, b = invoices[0], invoices[1]
         (sa, ba), (sb, bb) = await asyncio.gather(
-            submit(type="ocr.structured", media=inline(a / "p-001.png"), tier="gpu", wait=0),
-            submit(type="ocr.structured", media=inline(b / "p-001.png"), tier="gpu", wait=0))
+            submit({"type": "ocr.structured", "arguments": {"media": inline(a / "p-001.png")},
+                    "tier": "gpu", "wait": 0}),
+            submit({"type": "ocr.structured", "arguments": {"media": inline(b / "p-001.png")},
+                    "tier": "gpu", "wait": 0}))
         print(f"  first: {sa} {ba.get('status')}  second: {sb} {bb.get('status')} queue_position={bb.get('queue_position')}")
         if not (sa == 202 and sb == 202):
             failures.append(f"VL submits: {sa} {sb}")
@@ -251,10 +219,12 @@ async def main() -> int:
             batch = []
             for i in range(6):
                 d = invoices[i % len(invoices)]
-                st, body = await submit(type="ocr.structured", media=inline(d / "p-001.png"), params={"dpi": 200 + i}, priority="batch")
+                st, body = await submit({"type": "ocr.structured", "arguments": {
+                    "media": inline(d / "p-001.png"), "options": {"dpi": 200 + i}}, "priority": "batch"})
                 batch.append(body["job_id"])
             t0 = time.monotonic()
-            st, body = await submit(type="triage.audio", media=inline(wavs / "m0_hum_then_speech.wav"), wait=60)
+            st, body = await submit({"type": "triage.audio", "arguments": {
+                "media": inline(wavs / "m0_hum_then_speech.wav")}, "wait": 60})
             tri = time.monotonic() - t0
             pending = 0
             for j in batch:
@@ -272,7 +242,6 @@ async def main() -> int:
         else:
             print("\n(skip) batch-vs-interactive: triage_audio engine or M0 wavs not configured")
     finally:
-        httpd.shutdown()
         await link.close()
         await node.close()
     print("\n" + ("SMOKE FAILED:\n  - " + "\n  - ".join(failures) if failures else "SMOKE OK"))

@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from conftest import NODE_DIR, NODE_KEY, build_stack, inline
+from conftest import NODE_DIR, NODE_KEY, arguments, build_stack, inline, output
 from mmp_broker.core import Broker
 from mmp_node.engine_io import EngineResult
 from mmp_node.ws_client import WsLink
@@ -32,10 +32,12 @@ async def provider(tmp_path, monkeypatch):
 
     async def run(spec, job, timeout, vram):
         calls.append(spec.name)
-        params = job["params"]
-        await asyncio.sleep(params.get("sleep_ms", 0) / 1000)
-        return EngineResult({"media_id": job["media_id"], "bytes": Path(job["media_path"]).stat().st_size,
-                             "params": params, "started_at_ms": int(time.time() * 1000)}, {})
+        options = job["arguments"].get("options", {})
+        media = job["arguments"]["media"]
+        await asyncio.sleep(options.get("sleep_ms", 0) / 1000)
+        return EngineResult({"result": {"kind": "json", "value": {
+            "media_id": media["media_id"], "bytes": Path(media["path"]).stat().st_size,
+            "options": options, "started_at_ms": int(time.time() * 1000)}}}, {})
 
     stack.node.pool.run = run
     yield stack, calls
@@ -58,8 +60,8 @@ async def test_bound_discovery_and_execution_but_remote_registration_hides_inter
     remote.on_register(stack.node.register_message(bound=True), send)
     assert [x["capability"]["id"] for x in remote.capabilities()[1]["capabilities"]] == ["echo"]
     assert "private-echo" not in remote.nodes[stack.node.node_id].engine_versions
-    assert (await remote.submit({"type": "echo.internal", "media": inline(b"private"), "wait": 1}))[1]["error"] == "no_node"
-    done = (await stack.submit(type="echo.internal", media=inline(b"private"), wait=1)).json()
+    assert (await remote.submit({"type": "echo.internal", "arguments": arguments(inline(b"private")), "wait": 1}))[1]["error"] == "no_node"
+    done = (await stack.submit(type="echo.internal", arguments=arguments(inline(b"private")), wait=1)).json()
     assert done["status"] == "done" and calls == ["private_echo"]
     assert (await stack.get(done["job_id"])).json()["status"] == "done"
 
@@ -67,10 +69,10 @@ async def test_bound_discovery_and_execution_but_remote_registration_hides_inter
 async def test_remote_forgery_and_internal_job_get_cancel_are_rejected(provider):
     stack, calls = provider
     raw = {"req_id": "forged", "op": "submit", "bound": True,
-           "job": {"type": "echo.internal", "media": inline(b"private"), "bound": True}}
+           "job": {"type": "echo.internal", "arguments": arguments(inline(b"private")), "bound": True}}
     denied = await stack.node.dispatch(raw)
     assert denied["body"]["error"] == "unsupported_type" and calls == []
-    pending = (await stack.submit(type="echo.internal", media=inline(b"private"), params={"sleep_ms": 500})).json()
+    pending = (await stack.submit(type="echo.internal", arguments=arguments(inline(b"private"), {"sleep_ms": 500}))).json()
     for op in ("get", "cancel"):
         denied = await stack.node.dispatch({"req_id": op, "op": op, "job_id": pending["job_id"]})
         assert denied["http_status"] == 404 and denied["body"]["error"] == "not_found"
@@ -84,7 +86,7 @@ async def test_heartbeat_hides_internal_engine_and_cache_keys_do_not_cross_chann
     stack.node.pool.loaded = lambda: ["echo", "private_echo"]
     assert stack.node.heartbeat_message()["payload"]["engines_loaded"] == ["echo"]
     assert stack.node.heartbeat_message(bound=True)["payload"]["engines_loaded"] == ["echo", "private_echo"]
-    request = {"type": "echo", "media": inline(b"same"), "wait": 1}
+    request = {"type": "echo", "arguments": arguments(inline(b"same")), "wait": 1}
     bound = (await stack.submit(**request)).json()
     _, remote = await stack.node.submit(request)
     assert not remote["cached"]
@@ -93,13 +95,14 @@ async def test_heartbeat_hides_internal_engine_and_cache_keys_do_not_cross_chann
 
 async def test_remote_public_job_read_filters_internal_discovery_without_mutating_bound_result(provider):
     stack, _ = provider
-    done = (await stack.submit(type="echo", media=inline(b"same"), wait=1)).json()
+    done = (await stack.submit(type="echo", arguments=arguments(inline(b"same")), wait=1)).json()
     job = stack.node.jobs[done["job_id"]]
-    job.result = {"kind": "image", "format": "image/png", "capabilities_available": ["echo.internal"]}
+    job.outputs = {"digest": {"kind": "json", "value": {
+        "kind": "image", "format": "image/png", "capabilities_available": ["echo.internal"]}}}
     _, remote = await stack.node.get(job.job_id)
-    assert remote["result"]["capabilities_available"] == []
-    assert job.result["capabilities_available"] == ["echo.internal"]
-    assert stack.node.registry.capabilities_for_digest(job.result, include_internal=True) == ["echo.internal"]
+    assert remote["outputs"]["digest"]["value"]["capabilities_available"] == []
+    assert job.outputs["digest"]["value"]["capabilities_available"] == ["echo.internal"]
+    assert stack.node.registry.capabilities_for_digest(job.outputs["digest"]["value"], include_internal=True) == ["echo.internal"]
 
 
 async def test_real_remote_broker_cannot_read_or_cancel_bound_internal_job(provider, tmp_path):
@@ -112,15 +115,15 @@ async def test_real_remote_broker_cannot_read_or_cancel_bound_internal_job(provi
     link.start()
     try:
         await broker.wait_nodes(1)
-        done = (await stack.submit(type="echo.internal", media=inline(b"private"), wait=1)).json()
+        done = (await stack.submit(type="echo.internal", arguments=arguments(inline(b"private")), wait=1)).json()
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=5, trust_env=False) as client:
             caps = (await client.get("/capabilities")).json()["capabilities"]
             assert {x["capability"]["id"] for x in caps} == {"echo"}
-            denied = await client.post("/jobs", json={"type": "echo.internal", "media": inline(b"private")})
+            denied = await client.post("/jobs", json={"type": "echo.internal", "arguments": arguments(inline(b"private"))})
             assert denied.status_code == 503 and denied.json()["error"] == "no_node"
             assert (await client.get(f"/jobs/{done['job_id']}")).status_code == 404
             assert (await client.delete(f"/jobs/{done['job_id']}")).status_code == 404
-            public = await client.post("/jobs", json={"type": "echo", "media": inline(b"public"), "wait": 1})
+            public = await client.post("/jobs", json={"type": "echo", "arguments": arguments(inline(b"public")), "wait": 1})
             assert public.json()["status"] == "done"
     finally:
         await link.close()

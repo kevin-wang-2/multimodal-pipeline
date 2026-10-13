@@ -73,22 +73,26 @@ async def main():
         monitoring = asyncio.create_task(monitor())
         try:
             await wait_warm(node)
-            request = {"type": "image.generate", "media": {
-                "inline": base64.b64encode(
-                    b"A hand painted isometric game village on a grassy island, small timber houses, "
-                    b"a winding stone path, warm afternoon light, cohesive stylized game concept art, no text").decode(),
-                "content_type": "text/plain",
-                "put": {"url": f"http://127.0.0.1:{server.server_port}/image.json"}}, "params": {"seed": 42}}
+            request = {
+                "type": "image.generate",
+                "arguments": {
+                    "prompt": "A hand painted isometric game village on a grassy island, small timber houses, "
+                              "a winding stone path, warm afternoon light, cohesive stylized game concept art, no text",
+                    "options": {"seed": 42},
+                },
+                "delivery": {"image": {"url": f"http://127.0.0.1:{server.server_port}/image.png"}},
+            }
             started = time.monotonic()
             code, submitted = await broker.submit(request)
             job_id = submitted["job_id"]
             while submitted["status"] not in {"done", "failed", "cancelled"}:
                 code, submitted = await broker.get(job_id, wait=120)
             assert submitted["status"] == "done", submitted
-            result = submitted.get("result") or json.loads(Handler.data)
-            png = base64.b64decode(result["data_base64"])
+            image = submitted["outputs"]["image"]
+            png = Handler.data if image.get("delivered") else base64.b64decode(image["inline"])
+            metadata = submitted["outputs"]["metadata"]["value"]
             assert png.startswith(b"\x89PNG\r\n\x1a\n")
-            assert result["width"] == result["height"] == 1024
+            assert metadata["width"] == metadata["height"] == 1024
             destination = Path(os.environ.get("MMP_KREA_SMOKE_OUTPUT", str(Path(tmp) / "game-village.png")))
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(png)
@@ -96,11 +100,10 @@ async def main():
             await wait_warm(node)
             assert ["image_generate"] in states, "Florence was not evicted during Krea generation"
             Handler.data = b""
-            _, cached = await broker.submit({**request, "media": {**request["media"],
-                "put": {"url": f"http://127.0.0.1:{server.server_port}/cached-image.json"}}, "wait": 120})
+            _, cached = await broker.submit({**request, "delivery": {
+                "image": {"url": f"http://127.0.0.1:{server.server_port}/cached-image.png"}}, "wait": 120})
             assert cached["cached"] is True and cached["usage"]["compute_ms"] == 0, cached
-            if cached.get("result_ref"):
-                assert base64.b64decode(json.loads(Handler.data)["data_base64"]) == png
+            assert Handler.data == png
             print(json.dumps({"status": "done", "wall_s": round(time.monotonic() - started, 2),
                               "source": submitted["source"], "metrics": node.jobs[job_id].engine_metrics,
                               "png_bytes": len(png), "output": str(destination),

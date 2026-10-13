@@ -4,7 +4,7 @@ import { describeCapability, resolveCapability, type CapabilityQuery } from "./c
 
 /** 任务态响应：200 done / cancelled、202 queued / running。失败以 MmpError 抛出。 */
 export type JobStatusResponse = JobDone | {
-  job_id: string; type: string; media_id?: string; status: "queued" | "running" | "cancelled";
+  job_id: string; type: string; media_ids: Record<string, string | string[]>; status: "queued" | "running" | "cancelled";
   eta_sec?: number; queue_position?: number; cancel_requested?: boolean;
 };
 

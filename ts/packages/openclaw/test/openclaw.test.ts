@@ -55,15 +55,15 @@ function fakeFetch(route: (url: string, init: RequestInit) => { status: number; 
 
 test("triage: capability discovery → generic context passthrough; over-limit makes no request", async () => {
   const context = "[mmp:agent-context start]\n音频上下文\n[mmp:agent-context end]";
-  const done = { job_id: "n-01J7ZQ9K3W8B6Q4M2N1P5R7S9T", type: "triage.audio", status: "done", media_id: MID, cached: false, source: digest.source, result: digest,
+  const done = { job_id: "n-01J7ZQ9K3W8B6Q4M2N1P5R7S9T", type: "triage.audio", status: "done", media_ids: { media: MID }, cached: false, source: digest.source, outputs: { digest: { kind: "json", value: digest } },
     agent_context: { format: "mmp-agent-context-v1", content_type: "text/plain; charset=utf-8", text: context } };
-  const capabilities = { protocol_version: "2.0", capabilities: [{ capability: { id: "triage.audio", visibility: "public", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["audio/*", "video/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n"] }] };
+  const capabilities = { protocol_version: "3.0", capabilities: [{ capability: { id: "triage.audio", visibility: "public", purpose: "triage", tiers: [], input: { fields: [{ name: "media", kind: "media", required: true, accepts: ["audio/*", "video/*"], cardinality: { min: 1, max: 1 } }] }, output: { fields: [{ name: "digest", kind: "json", required: true, schema: {} }], agent_context: "required" } }, nodes: ["n"] }] };
   const { f, calls } = fakeFetch((url) => url.endsWith("/capabilities") ? { status: 200, body: capabilities } : { status: 200, body: done });
   const cfg = { baseUrl: "http://b", apiKey: "k", waitSec: 30, maxInlineBytes: 100 };
   const out = await triageBytes(makeClient(cfg, f), new Uint8Array(50), "audio/mp4", cfg);
   assert.equal(out.text, context);
   assert.equal(out.mediaId, MID);
-  assert.equal(calls[1].body.media.content_type, "audio/mp4");
+  assert.equal(calls[1].body.arguments.media.content_type, "audio/mp4");
   assert.equal(calls[1].body.type, "triage.audio");
   assert.equal(calls[1].body.priority, "interactive");
   await assert.rejects(triageBytes(makeClient(cfg, f), new Uint8Array(200), "audio/mp4", cfg), (e: MmpError) => e.code === "media_too_large");
@@ -71,9 +71,9 @@ test("triage: capability discovery → generic context passthrough; over-limit m
 });
 
 test("triage: image uses the discovered task without client modality code", async () => {
-  const done = { job_id: "n-01J7ZQ9K3W8B6Q4M2N1P5R7S9T", type: "triage.image", status: "done", media_id: MID, cached: false, source: digest.source, result: {},
+  const done = { job_id: "n-01J7ZQ9K3W8B6Q4M2N1P5R7S9T", type: "triage.image", status: "done", media_ids: { image: MID }, cached: false, source: digest.source, outputs: { digest: { kind: "json", value: {} } },
     agent_context: { format: "mmp-agent-context-v1", content_type: "text/plain; charset=utf-8", text: "image context" } };
-  const capabilities = { protocol_version: "2.0", capabilities: [{ capability: { id: "triage.image", visibility: "public", purpose: "triage", tiers: [], input: { media: { presence: "required", accepts: ["image/*"] } }, output: { schema: {}, agent_context: "required" } }, nodes: ["n"] }] };
+  const capabilities = { protocol_version: "3.0", capabilities: [{ capability: { id: "triage.image", visibility: "public", purpose: "triage", tiers: [], input: { fields: [{ name: "image", kind: "media", required: true, accepts: ["image/*"], cardinality: { min: 1, max: 1 } }] }, output: { fields: [{ name: "digest", kind: "json", required: true, schema: {} }], agent_context: "required" } }, nodes: ["n"] }] };
   const { f, calls } = fakeFetch((url) => url.endsWith("/capabilities") ? { status: 200, body: capabilities } : { status: 200, body: done });
   const cfg = { baseUrl: "http://b", maxInlineBytes: 100 };
   const out = await triageBytes(makeClient(cfg, f), new Uint8Array(10), "image/png", cfg);

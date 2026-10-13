@@ -1,10 +1,10 @@
 # multimodal-pipeline
 
-给**纯文本主模型**的 agent 补一层多模态感知。
+给 agent 宿主提供 capability 驱动的多模态任务层：命名 text / JSON / media 输入输出，同一契协议承载预检、OCR 和生成类模型。
 
 媒体附件进来 → 一组小模型自动产出**带时间轴的结构化 digest**（原子事实 + 缺口 + 可用能力清单）→ 上层 agent 自己判断信息够不够、自己挑更贵的能力（扒谱 / 指纹 / 分轨 / 结构化 OCR / VLM……）。agent 永远只消费文本。
 
-一句话：**把"无时间轴的单工具转写"升级成"带时间轴、可扩展、有预算意识的多工具感知服务"。**
+预检仍然服务于纯文本主模型：媒体附件进来 → 小模型产出带时间轴的 digest → 上层 agent 按需再调更贵的能力。
 
 ## 为什么
 
@@ -102,7 +102,7 @@ ts/                    pnpm workspace
 .gitea/workflows/      ci.yml（unit：契约 + ts + node 验收）、gpu.yml（windows runner：真模型冒烟 + Windows 全套）
 docs/
   架构.md              设计文档（公开版）
-  协议.md              协议 v2.0 人读版，与 protocol/schemas 同步
+  协议.md              协议 v3.0 人读版，与 protocol/schemas 同步
   实施计划.md          M1 的步骤拆分、验收与顺序（S0–S6）
   M0-测试计划.md        M0 四组实验的计划
   结果-T1.md … T5      每组实验的原始记录（负结果也记）
@@ -156,7 +156,7 @@ cp node/node.toml.example node/node.toml      # 改 node.id / node.key；默认�
 # 提交一个 echo 任务（inline 媒体），wait 5 秒拿结果；再提交一次得到 cached: true
 B64=$(head -c 3000 /dev/urandom | base64 | tr -d '\n')
 curl -s -X POST localhost:8765/jobs -H 'content-type: application/json' \
-  -d "{\"type\":\"echo\",\"media\":{\"inline\":\"$B64\"},\"params\":{\"sleep_ms\":100},\"wait\":5}"
+  -d "{\"type\":\"echo\",\"arguments\":{\"media\":{\"inline\":\"$B64\"},\"options\":{\"sleep_ms\":100}},\"wait\":5}"
 curl -s localhost:8765/capabilities; curl -s localhost:8765/health
 ```
 

@@ -77,7 +77,7 @@
     "engine_version": "2026-09-21",
     "generated_at": "2026-09-21T16:51:23+08:00",
     "degraded": false,
-    "params": {
+    "arguments": {
       "label_confidence_threshold": 0.3,
       "language": "auto"
     }

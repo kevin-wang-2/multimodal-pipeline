@@ -64,58 +64,13 @@ export type RequestPayload = {
       [k: string]: unknown;
     }
 );
-/**
- * 媒体句柄（架构.md §6）。一种契约、多种实例：A 只做 HTTP GET / PUT，不认识任何存储厂商。inline / get / ref 至少一个；ref 是内容引用（此前某次响应里的 media_id），A 本地已有则不再取；ref 与 inline/get 同时给时，A 缺内容才取，取到后校验 hash。put 可选，供大输出写回。内容 hash 由 A 取到字节后计算，与来源无关。
- */
-export type MediaHandle = {
-  [k: string]: unknown;
-} & {
-  /**
-   * base64 编码的媒体字节。解码后上限 8 MiB（8388608 字节 → base64 最长 11184812 字符）；超过必须走 get。
-   */
+export type MediaOutput = {
+  kind: "media";
+  content_type: string;
+  bytes: number;
+  sha256: string;
   inline?: string;
-  get?: Endpoint;
-  /**
-   * 内容引用：A 本地已有这份媒体则跳过 inline / get（v1.1）。只给 ref 而 A 没有 → 422 media_not_found；与 inline / get 一起给而取回的内容 hash 不符 → 422 media_hash_mismatch。
-   */
-  ref?: string;
-  put?: Endpoint1;
-  /**
-   * 可选的 MIME 提示。A 仍以字节嗅探为准。
-   */
-  content_type?: string;
-};
-/**
- * 200：任务完成。result 与 result_ref 二选一。
- */
-export type JobDone = {
-  /**
-   * 由 A 生成：<node_id>-<ULID>。B 不生成 id，靠前缀把 GET / DELETE 路由回原节点。
-   */
-  job_id: string;
-  /**
-   * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
-   */
-  type: string;
-  status: "done";
-  /**
-   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
-   */
-  media_id: string;
-  cached: boolean;
-  source: Source;
-  /**
-   * 该任务类型 output.schema 的实例；预检类型即 digest。
-   */
-  result?: {
-    [k: string]: unknown;
-  };
-  result_ref?: ResultRef;
-  agent_context?: AgentContext;
-  usage?: Usage;
-  timings_ms?: {
-    [k: string]: number;
-  };
+  delivered?: true;
 } & {
   [k: string]: unknown;
 };
@@ -160,12 +115,17 @@ export type EngineIo = {
   [k: string]: unknown;
 } & (Hello | Run | Cancel | Shutdown | Result | Error | Log);
 /**
- * 引擎→A。result 是该任务类型 output.schema 的实例（digest 由引擎组装，A 只补 source）。
+ * 引擎→A。outputs 按 capability.output.fields 的命名字段返回（digest 由引擎组装，A 只补 source）。
  */
 export type Result = {
   type: "result";
   id: string;
-  result?: unknown;
+  /**
+   * 按 capability output field name 返回。text={kind,text}；json={kind,value}；media={kind,content_type,data_base64}。
+   */
+  outputs?: {
+    [k: string]: unknown;
+  };
   /**
    * 引擎请求 A 在释放当前阶段资源后执行一次内部质量兜底；不是对外任务升级。
    */
@@ -184,6 +144,26 @@ export type Result = {
   };
 } & {
   [k: string]: unknown;
+};
+/**
+ * 媒体输入句柄（架构.md §6）。inline / get / ref 至少一个；ref 是内容引用（此前某次响应里的 media_id），A 本地已有则不再取；ref 与 inline/get 同时给时，A 缺内容才取，取到后校验 hash。输出 PUT 端点只在 JobRequest.delivery 中声明。内容 hash 由 A 取到字节后计算，与来源无关。
+ */
+export type MediaHandle = {
+  [k: string]: unknown;
+} & {
+  /**
+   * base64 编码的媒体字节。解码后上限 8 MiB（8388608 字节 → base64 最长 11184812 字符）；超过必须走 get。
+   */
+  inline?: string;
+  get?: Endpoint1;
+  /**
+   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
+   */
+  ref?: string;
+  /**
+   * 可选的 MIME 提示。A 仍以字节嗅探为准。
+   */
+  content_type?: string;
 };
 
 export interface Protocol {
@@ -209,6 +189,16 @@ export interface Protocol {
    * 引擎档位。cpu 便宜档常开；gpu-fast 快档；gpu 慢档 / 重模型；remote 由 A 转调外部服务。
    */
   capability__Tier?: "cpu" | "gpu-fast" | "gpu" | "remote";
+  capability__FieldName?: string;
+  capability__Cardinality?: Cardinality;
+  capability__InputField?: TextInputField | JsonInputField | MediaInputField;
+  capability__TextInputField?: TextInputField;
+  capability__JsonInputField?: JsonInputField;
+  capability__MediaInputField?: MediaInputField;
+  capability__OutputField?: TextOutputField | JsonOutputField | MediaOutputField;
+  capability__TextOutputField?: TextOutputField;
+  capability__JsonOutputField?: JsonOutputField;
+  capability__MediaOutputField?: MediaOutputField;
   capability__TierSpec?: TierSpec;
   digest?: Digest;
   digest__ToolStatus?: "ok" | "partial" | "failed" | "skipped";
@@ -272,7 +262,12 @@ export interface Protocol {
   "job-api__Wait"?: number;
   "job-api__JobRequest"?: JobRequest;
   "job-api__Source"?: Source;
-  "job-api__ResultRef"?: ResultRef;
+  "job-api__MediaIds"?: MediaIds;
+  "job-api__TextOutput"?: TextOutput;
+  "job-api__JsonOutput"?: JsonOutput;
+  "job-api__MediaOutput"?: MediaOutput;
+  "job-api__OutputAtom"?: TextOutput | JsonOutput | MediaOutput;
+  "job-api__OutputValue"?: (TextOutput | JsonOutput | MediaOutput) | [MediaOutput, ...MediaOutput[]];
   "job-api__AgentContext"?: AgentContext;
   "job-api__Usage"?: Usage;
   "job-api__JobDone"?: JobDone;
@@ -295,7 +290,7 @@ export interface Protocol {
    */
   "job-api__ProtocolVersion"?: string;
   "media-handle"?: MediaHandle;
-  "media-handle__Endpoint"?: Endpoint2;
+  "media-handle__Endpoint"?: Endpoint;
   /**
    * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
    */
@@ -362,32 +357,21 @@ export interface Capability {
   tiers: [TierSpec, ...TierSpec[]];
   input: {
     /**
-     * 媒体输入声明。accepts 是开放的 MIME 匹配器，可用 audio/* 或 * /*，同一能力可接受多种媒体。
+     * @minItems 1
      */
-    media: {
-      presence: "required" | "optional" | "none";
-      accepts: string[];
-      /**
-       * A 侧可选预处理器 id；调用方不应解释此字段。
-       */
-      preprocessor?: string;
-    };
-    /**
-     * params 的 JSON Schema（内联）。省略表示不接受任何 params。
-     */
-    params_schema?: {
-      [k: string]: unknown;
-    };
+    fields: [
+      TextInputField | JsonInputField | MediaInputField,
+      ...(TextInputField | JsonInputField | MediaInputField)[]
+    ];
   };
   output: {
     /**
-     * 结果的 schema：本协议内 schema 的 $id，或内联 JSON Schema。
+     * @minItems 1
      */
-    schema:
-      | string
-      | {
-          [k: string]: unknown;
-        };
+    fields: [
+      TextOutputField | JsonOutputField | MediaOutputField,
+      ...(TextOutputField | JsonOutputField | MediaOutputField)[]
+    ];
     /**
      * 该任务是否生成可直接交给基础模型的通用 agent context。
      */
@@ -421,6 +405,71 @@ export interface TierSpec {
    */
   max_concurrency?: number;
 }
+export interface TextInputField {
+  name: string;
+  kind: "text";
+  required: boolean;
+  description?: string;
+  schema: {
+    [k: string]: unknown;
+  };
+}
+export interface JsonInputField {
+  name: string;
+  kind: "json";
+  required: boolean;
+  description?: string;
+  schema: {
+    [k: string]: unknown;
+  };
+}
+export interface MediaInputField {
+  name: string;
+  kind: "media";
+  required: boolean;
+  description?: string;
+  /**
+   * @minItems 1
+   */
+  accepts: [string, ...string[]];
+  cardinality: Cardinality;
+  preprocessor?: string;
+}
+export interface Cardinality {
+  min: number;
+  max: number;
+}
+export interface TextOutputField {
+  name: string;
+  kind: "text";
+  required: boolean;
+  description?: string;
+  schema: {
+    [k: string]: unknown;
+  };
+}
+export interface JsonOutputField {
+  name: string;
+  kind: "json";
+  required: boolean;
+  description?: string;
+  schema:
+    | string
+    | {
+        [k: string]: unknown;
+      };
+}
+export interface MediaOutputField {
+  name: string;
+  kind: "media";
+  required: boolean;
+  description?: string;
+  /**
+   * @minItems 1
+   */
+  produces: [string, ...string[]];
+  cardinality: Cardinality;
+}
 /**
  * A→B，每 10s 一次；B 连续 3 次未收到视为断线。
  */
@@ -448,12 +497,17 @@ export interface JobRequest {
    * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
    */
   type: string;
-  media: MediaHandle;
   /**
-   * 任务类型专有参数，按该类型 capability.input.params_schema 校验。进缓存键（规范化后 hash）。
+   * 按 capability.input.fields 的 name 提交命名输入；A 按字段 kind/schema/MIME/cardinality 校验。
    */
-  params?: {
+  arguments: {
     [k: string]: unknown;
+  };
+  /**
+   * media output 字段名到受控 PUT endpoint（或与多值输出等长的 endpoint 数组）的映射；没有 endpoint 时只能在内联上限内返回。
+   */
+  delivery?: {
+    [k: string]: Endpoint | [Endpoint, ...Endpoint[]];
   };
   priority?: "interactive" | "batch";
   /**
@@ -465,19 +519,7 @@ export interface JobRequest {
    */
   wait?: number;
 }
-/**
- * 带认证的 GET 端点：对象存储 presigned URL、宿主自带 token 的接口等都是它的实例。
- */
 export interface Endpoint {
-  url: string;
-  headers?: {
-    [k: string]: string;
-  };
-}
-/**
- * 可选：大输出的 PUT 端点。存在时 A 可把超限输出 PUT 到这里，响应里只给引用。
- */
-export interface Endpoint1 {
   url: string;
   headers?: {
     [k: string]: string;
@@ -498,6 +540,34 @@ export interface ResponsePayload {
   body: (JobDone | JobPending | JobFailed | JobCancelled) | ErrorBody;
 }
 /**
+ * 200：任务完成。outputs 的字段名与 capability.output.fields 一致。
+ */
+export interface JobDone {
+  /**
+   * 由 A 生成：<node_id>-<ULID>。B 不生成 id，靠前缀把 GET / DELETE 路由回原节点。
+   */
+  job_id: string;
+  /**
+   * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
+   */
+  type: string;
+  status: "done";
+  media_ids: MediaIds;
+  cached: boolean;
+  source: Source;
+  outputs: {
+    [k: string]: (TextOutput | JsonOutput | MediaOutput) | [MediaOutput, ...MediaOutput[]];
+  };
+  agent_context?: AgentContext;
+  usage?: Usage;
+  timings_ms?: {
+    [k: string]: number;
+  };
+}
+export interface MediaIds {
+  [k: string]: string | [string, ...string[]];
+}
+/**
  * 结果的来源标注（铁律 5）。描述的是产物本身：哪个引擎、哪一档、何时、是否降级。"是否命中缓存"属于本次交付而非产物，放在 JobDone.cached。
  */
 export interface Source {
@@ -514,19 +584,19 @@ export interface Source {
   degraded: boolean;
   degraded_reason?: "timeout" | "tier_unavailable" | "partial_failure";
   /**
-   * 实际生效的参数（规范化后），含默认值；如 label_confidence_threshold。
+   * 实际生效的非媒体命名输入；媒体句柄、URL 与凭据不进入来源信息。
    */
-  params?: {
+  arguments?: {
     [k: string]: unknown;
   };
 }
-/**
- * 大输出已 PUT 到请求方给的 media.put 端点时，响应里只给这份引用。
- */
-export interface ResultRef {
-  content_type: string;
-  bytes: number;
-  sha256: string;
+export interface TextOutput {
+  kind: "text";
+  text: string;
+}
+export interface JsonOutput {
+  kind: "json";
+  value: unknown;
 }
 /**
  * 由任务实现确定性生成、可直接交给基础模型的上下文；客户端只透传，不解析其中的模态语义。
@@ -548,10 +618,7 @@ export interface JobPending {
    * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
    */
   type: string;
-  /**
-   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
-   */
-  media_id?: string;
+  media_ids: MediaIds;
   status: "queued" | "running";
   eta_sec?: number;
   queue_position?: number;
@@ -572,10 +639,7 @@ export interface JobFailed {
    * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
    */
   type: string;
-  /**
-   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
-   */
-  media_id?: string;
+  media_ids: MediaIds;
   status: "failed";
   /**
    * 错误码表；HTTP 状态一一对应，见 docs/协议.md。
@@ -609,10 +673,7 @@ export interface JobCancelled {
    * 任务类型 id。点号分命名空间（triage.audio / ocr.structured），下划线分词（pitch_transcribe）。
    */
   type: string;
-  /**
-   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
-   */
-  media_id?: string;
+  media_ids: MediaIds;
   status: "cancelled";
 }
 /**
@@ -670,7 +731,7 @@ export interface Segment {
   start: number;
   end: number;
   /**
-   * 置信度 ≥ 阈值（source.params.label_confidence_threshold，默认 0.30）的粗类别标签，按 score 降序。
+   * 置信度 ≥ 阈值（source.arguments.options.label_confidence_threshold，默认 0.30）的粗类别标签，按 score 降序。
    */
   labels: Label[];
   /**
@@ -818,14 +879,9 @@ export interface Run {
      */
     tier: "cpu" | "gpu-fast" | "gpu" | "remote";
     /**
-     * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
+     * 解析后的命名输入。text/json 保留值；media 变为 {media_id,path,content_type?} 或其数组。
      */
-    media_id: string;
-    /**
-     * 本机文件路径；input.media=none 的类型省略。
-     */
-    media_path?: string;
-    params: {
+    arguments: {
       [k: string]: unknown;
     };
     internal?: {
@@ -850,7 +906,7 @@ export interface Shutdown {
 export interface Error {
   type: "error";
   id: string;
-  error: "engine_failed" | "bad_params" | "cancelled";
+  error: "engine_failed" | "bad_arguments" | "cancelled";
   message?: string;
 }
 /**
@@ -901,7 +957,10 @@ export interface HealthResponse {
     heartbeat?: HeartbeatPayload;
   }[];
 }
-export interface Endpoint2 {
+/**
+ * 带认证的 GET 端点：对象存储 presigned URL、宿主自带 token 的接口等都是它的实例。
+ */
+export interface Endpoint1 {
   url: string;
   headers?: {
     [k: string]: string;

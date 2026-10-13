@@ -26,7 +26,10 @@ function specificity(pattern: string): number {
 export function resolveCapability(response: CapabilitiesResponse, query: CapabilityQuery): Capability {
   const matches = response.capabilities.flatMap(({ capability }) => {
     if (capability.purpose !== query.purpose) return [];
-    const accepts = capability.input.media.accepts.filter((pattern) => matchesMediaType(pattern, query.contentType));
+    const accepts = capability.input.fields
+      .filter((field) => field.kind === "media")
+      .flatMap((field) => field.accepts ?? [])
+      .filter((pattern) => matchesMediaType(pattern, query.contentType));
     return accepts.length ? [{ capability, rank: Math.max(...accepts.map(specificity)) }] : [];
   });
   if (!matches.length) {
@@ -40,7 +43,7 @@ export function resolveCapability(response: CapabilitiesResponse, query: Capabil
   return best[0].capability;
 }
 
-/** 按任务类型 id 按需取得一项完整能力描述；不会把全量 params schema 注入宿主提示。 */
+/** 按任务类型 id 按需取得一项完整能力描述；宿主据 fields 动态暴露输入与输出。 */
 export function describeCapability(response: CapabilitiesResponse, id: string): Capability {
   const matches = response.capabilities.filter(({ capability }) => capability.id === id);
   if (!matches.length) {

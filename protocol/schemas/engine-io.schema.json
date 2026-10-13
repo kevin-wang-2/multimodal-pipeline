@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:2:engine-io",
+  "$id": "urn:mmp:protocol:3:engine-io",
   "title": "EngineIo",
   "description": "A 与引擎子进程之间的 JSON-lines 协议（实施计划 §4.2）。每行一个对象，以 type 区分。A 内部使用，不暴露给 B / C；引擎只依赖标准库即可实现。媒体以本机临时文件路径传给引擎——这是进程内的实现细节，不是媒体句柄契约的一部分。",
   "type": "object",
@@ -26,7 +26,7 @@
         "type": { "const": "hello" },
         "engine": { "type": "string", "minLength": 1 },
         "engine_version": { "type": "string", "minLength": 1 },
-        "protocol_version": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/ProtocolVersion" }
+        "protocol_version": { "$ref": "urn:mmp:protocol:3:job-api#/$defs/ProtocolVersion" }
       },
       "required": ["type", "engine", "engine_version", "protocol_version"],
       "additionalProperties": false
@@ -40,16 +40,18 @@
         "job": {
           "type": "object",
           "properties": {
-            "job_id": { "$ref": "urn:mmp:protocol:2:job-api#/$defs/JobId" },
-            "task_type": { "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId" },
-            "tier": { "$ref": "urn:mmp:protocol:2:capability#/$defs/Tier" },
-            "media_id": { "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId" },
-            "media_path": { "description": "本机文件路径；input.media=none 的类型省略。", "type": "string", "minLength": 1 },
-            "params": { "type": "object" },
+            "job_id": { "$ref": "urn:mmp:protocol:3:job-api#/$defs/JobId" },
+            "task_type": { "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId" },
+            "tier": { "$ref": "urn:mmp:protocol:3:capability#/$defs/Tier" },
+            "arguments": {
+              "description": "解析后的命名输入。text/json 保留值；media 变为 {media_id,path,content_type?} 或其数组。",
+              "type": "object",
+              "minProperties": 1
+            },
             "internal": { "type": "object" },
             "timeout_sec": { "type": "number", "exclusiveMinimum": 0 }
           },
-          "required": ["job_id", "task_type", "tier", "media_id", "params"],
+          "required": ["job_id", "task_type", "tier", "arguments"],
           "additionalProperties": false
         }
       },
@@ -71,12 +73,16 @@
       "additionalProperties": false
     },
     "Result": {
-      "description": "引擎→A。result 是该任务类型 output.schema 的实例（digest 由引擎组装，A 只补 source）。",
+      "description": "引擎→A。outputs 按 capability.output.fields 的命名字段返回（digest 由引擎组装，A 只补 source）。",
       "type": "object",
       "properties": {
         "type": { "const": "result" },
         "id": { "$ref": "#/$defs/ReqId" },
-        "result": {},
+        "outputs": {
+          "description": "按 capability output field name 返回。text={kind,text}；json={kind,value}；media={kind,content_type,data_base64}。",
+          "type": "object",
+          "minProperties": 1
+        },
         "retry": {
           "description": "引擎请求 A 在释放当前阶段资源后执行一次内部质量兜底；不是对外任务升级。",
           "type": "object",
@@ -96,8 +102,8 @@
       },
       "required": ["type", "id"],
       "oneOf": [
-        { "required": ["result"], "not": { "required": ["retry"] } },
-        { "required": ["retry"], "not": { "required": ["result"] } }
+        { "required": ["outputs"], "not": { "required": ["retry"] } },
+        { "required": ["retry"], "not": { "required": ["outputs"] } }
       ],
       "additionalProperties": false
     },
@@ -106,7 +112,7 @@
       "properties": {
         "type": { "const": "error" },
         "id": { "$ref": "#/$defs/ReqId" },
-        "error": { "type": "string", "enum": ["engine_failed", "bad_params", "cancelled"] },
+        "error": { "type": "string", "enum": ["engine_failed", "bad_arguments", "cancelled"] },
         "message": { "type": "string" }
       },
       "required": ["type", "id", "error"],

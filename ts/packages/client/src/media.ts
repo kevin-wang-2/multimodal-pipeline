@@ -13,17 +13,13 @@ export const media = {
     if (contentType) h.content_type = contentType;
     return h;
   },
-  /** 内容引用：此前任一响应里的 media_id。A 本地有就不再拉（v1.1）。 */
+  /** 内容引用：此前任一响应 media_ids 里的值。A 本地有就不再拉。 */
   ref(mediaId: string): MediaHandle {
     return { ref: mediaId };
   },
   /** ref + 来源：A 没有时才拉，拉完校验 hash。 */
   refOr(mediaId: string, source: MediaHandle): MediaHandle {
     return { ...source, ref: mediaId };
-  },
-  /** 给句柄加大输出的 PUT 端点。 */
-  withPut(handle: MediaHandle, url: string, headers?: Record<string, string>): MediaHandle {
-    return { ...handle, put: headers ? { url, headers } : { url } };
   },
 };
 

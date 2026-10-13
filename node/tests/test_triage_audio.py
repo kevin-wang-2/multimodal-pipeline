@@ -18,7 +18,7 @@ from engines.triage_audio.digest import RawSegment, build_digest, timeline  # no
 from engines.triage_audio.presentation import render_agent_context  # noqa: E402
 from engines.triage_audio.vad import HOP_SEC, VadParams, speech_segments  # noqa: E402
 
-V_DIGEST = validator("urn:mmp:protocol:2:digest")
+V_DIGEST = validator("urn:mmp:protocol:3:digest")
 MID = "sha256:" + "ab" * 32
 SRC = {"tier": "cpu", "engine": "e", "engine_version": "1", "generated_at": "2026-09-20T00:00:00Z", "degraded": False}
 
@@ -130,9 +130,9 @@ async def test_triage_audio_end_to_end(tmp_path):
                           scheduler__engine_start_timeout_sec=300)
     try:
         wav = (TESTDATA / "m0_hum_then_speech.wav").read_bytes()
-        r = await s.submit(type="triage.audio", media={"inline": base64.b64encode(wav).decode()}, wait=120)
+        r = await s.submit(type="triage.audio", arguments={"media": {"inline": base64.b64encode(wav).decode()}}, wait=120)
         assert r.status_code == 200, r.json()
-        d = r.json()["result"]
+        d = r.json()["outputs"]["digest"]["value"]
         assert_valid(V_DIGEST, d)
         assert len(d["segments"]) == 2 and d["segments"][0]["asr"] is None
         cut = d["segments"][1]["start"]
@@ -140,12 +140,13 @@ async def test_triage_audio_end_to_end(tmp_path):
         assert "谱子" in d["segments"][1]["asr"]["text"]
         assert len(d["gaps"]) == 2 and d["gaps"][1].startswith("结构事实")
         assert d["source"]["engine_version"] and d["source"]["degraded"] is False
-        # params 进缓存键；不同阈值 → 重算
-        r2 = await s.submit(type="triage.audio", media={"inline": base64.b64encode(wav).decode()}, params={"label_confidence_threshold": 0.9}, wait=120)
+        # options 进缓存键；不同阈值 → 重算
+        r2 = await s.submit(type="triage.audio", arguments={"media": {"inline": base64.b64encode(wav).decode()},
+                                                            "options": {"label_confidence_threshold": 0.9}}, wait=120)
         assert r2.status_code == 200 and r2.json()["cached"] is False
-        assert r2.json()["result"]["segments"][0]["label_status"] == "unclassified"
+        assert r2.json()["outputs"]["digest"]["value"]["segments"][0]["label_status"] == "unclassified"
         # 非 WAV → bad_request，不是 500
-        r3 = await s.submit(type="triage.audio", media={"inline": base64.b64encode(b"ID3\x03\x00garbage" * 50).decode()}, wait=60)
+        r3 = await s.submit(type="triage.audio", arguments={"media": {"inline": base64.b64encode(b"ID3\x03\x00garbage" * 50).decode()}}, wait=60)
         assert r3.status_code == 400 and r3.json()["error"] == "bad_request"
     finally:
         await s.client.aclose(); await s.link.close(); await s.node.close()

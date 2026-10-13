@@ -18,7 +18,7 @@ PIL = pytest.importorskip("PIL.Image")
 
 
 def test_capability_is_valid_and_declares_vram():
-    v = validator("urn:mmp:protocol:2:capability")
+    v = validator("urn:mmp:protocol:3:capability")
     errs = list(v.iter_errors(CAPABILITIES[0]))
     assert not errs, [e.message for e in errs]
     tiers = {t["tier"]: t for t in CAPABILITIES[0]["tiers"]}

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from engines.common.io import BadParams, log, serve
+from engines.common.io import BadArguments, log, serve
 from engines.triage_audio import ENGINE, ENGINE_VERSION, PARAMS_SCHEMA
 from engines.triage_audio.audio import SR, UnsupportedAudio, read_wav_16k
 from engines.triage_audio.digest import RawSegment, build_digest, timeline
@@ -66,11 +66,11 @@ def _validate_params(params: dict) -> tuple[float, str]:
     allowed = set(PARAMS_SCHEMA["properties"])
     extra = set(params) - allowed
     if extra:
-        raise BadParams(f"unknown params {sorted(extra)}")
+        raise BadArguments(f"unknown options {sorted(extra)}")
     th = float(params.get("label_confidence_threshold", 0.30))
     lang = str(params.get("language", "auto"))
     if not 0 <= th <= 1 or lang not in PARAMS_SCHEMA["properties"]["language"]["enum"]:
-        raise BadParams("bad param value")
+        raise BadArguments("bad option value")
     return th, lang
 
 
@@ -82,7 +82,7 @@ def triage(m: Models, media_id: str, path: str, params: dict) -> dict:
     try:
         x = read_wav_16k(path)
     except UnsupportedAudio as e:
-        raise BadParams(f"unsupported media: {e}") from e
+        raise BadArguments(f"unsupported media: {e}") from e
     duration = len(x) / SR
     if duration == 0:
         return build_digest(media_id, 0.0, [], {"vad": "skipped", "audio_tagging": "skipped", "asr": "skipped"},
@@ -162,8 +162,10 @@ def triage(m: Models, media_id: str, path: str, params: dict) -> dict:
 async def run(job: dict, cancelled: asyncio.Event) -> tuple[object, dict]:
     assert MODELS_LOADED is not None
     # 模型推理是同步 CPU 工作；放线程池里跑，让 cancel / 其他 run 的 IO 不被卡住
-    digest = await asyncio.to_thread(triage, MODELS_LOADED, job["media_id"], job["media_path"], job.get("params") or {})
-    return digest, dict(digest["timings_ms"])
+    media = job["arguments"]["media"]
+    digest = await asyncio.to_thread(triage, MODELS_LOADED, media["media_id"], media["path"],
+                                     job["arguments"].get("options") or {})
+    return {"digest": {"kind": "json", "value": digest}}, dict(digest["timings_ms"])
 
 
 def main() -> None:

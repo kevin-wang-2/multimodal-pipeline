@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from engines.common.io import BadParams, log, serve
+from engines.common.io import BadArguments, log, serve
 from engines.ocr_structured import ENGINE_FAST, PARAMS_SCHEMA, VERSION_FAST
 from engines.ocr_structured.pages import UnsupportedDocument, load_pages
 from engines.ocr_structured.quality import flags_for, page_quality
@@ -59,7 +59,7 @@ def _params(params: dict) -> dict:
     allowed = set(PARAMS_SCHEMA["properties"])
     extra = set(params) - allowed
     if extra:
-        raise BadParams(f"unknown params {sorted(extra)}")
+        raise BadArguments(f"unknown options {sorted(extra)}")
     out = {k: v.get("default") for k, v in PARAMS_SCHEMA["properties"].items() if "default" in v}
     out.update(params)
     return out
@@ -109,14 +109,14 @@ def _vl_page(m: Models, img) -> tuple[str, list[dict]]:
 
 def run_sync(job: dict) -> dict:
     assert M is not None
-    p = _params(job.get("params") or {})
+    p = _params(job["arguments"].get("options") or {})
     tier = job["tier"]
     timings: dict[str, int] = {}
     t0 = time.monotonic()
     try:
-        page_count, pages = load_pages(job["media_path"], p.get("pages"), p["dpi"])
+        page_count, pages = load_pages(job["arguments"]["media"]["path"], p.get("pages"), p["dpi"])
     except UnsupportedDocument as e:
-        raise BadParams(f"unsupported media: {e}") from e
+        raise BadArguments(f"unsupported media: {e}") from e
     timings["render"] = int((time.monotonic() - t0) * 1000)
     out_pages = []
     suggest: list[int] = []
@@ -137,14 +137,14 @@ def run_sync(job: dict) -> dict:
             out_pages.append({"page": pg.index, "tier": tier, "width": w, "height": h, "text": md, "markdown": md,
                               "elements": elements, "quality": q, "flags": ["empty"] if not md.strip() else []})
         else:
-            raise BadParams(f"unknown tier {tier}")
+            raise BadArguments(f"unknown tier {tier}")
     timings["ocr"] = int((time.monotonic() - t0) * 1000)
     return {"page_count": page_count, "pages": out_pages, "suggest_upgrade_pages": suggest, "timings_ms": timings}
 
 
 async def run(job: dict, cancelled: asyncio.Event) -> tuple[object, dict]:
     result = await asyncio.to_thread(run_sync, job)
-    return result, dict(result["timings_ms"])
+    return {"document": {"kind": "json", "value": result}}, dict(result["timings_ms"])
 
 
 def main() -> None:

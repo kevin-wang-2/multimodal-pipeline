@@ -1,4 +1,4 @@
-"""echo：S1 用来验证 infra 的任务类型。原样返回媒体 hash、大小与 params；可配置 sleep 与故意失败。"""
+"""echo：S1 用来验证 infra 的任务类型。原样返回媒体 hash、大小与 options；可配置 sleep 与故意失败。"""
 
 ENGINE = "echo"
 ENGINE_VERSION = "1"
@@ -13,9 +13,10 @@ CAPABILITIES = [
             {"tier": "cpu", "engine": ENGINE, "engine_version": ENGINE_VERSION, "cost": "low",
              "latency_hint": "~sleep_ms", "max_concurrency": 4},
         ],
-        "input": {
-            "media": {"presence": "required", "accepts": ["*/*"]},
-            "params_schema": {
+        "input": {"fields": [
+            {"name": "media", "kind": "media", "required": True, "accepts": ["*/*"],
+             "cardinality": {"min": 1, "max": 1}},
+            {"name": "options", "kind": "json", "required": False, "schema": {
                 "type": "object",
                 "properties": {
                     "sleep_ms": {"type": "integer", "minimum": 0, "maximum": 600000, "default": 0},
@@ -25,17 +26,17 @@ CAPABILITIES = [
                     "tag": {"type": "string"},
                 },
                 "additionalProperties": False,
-            },
-        },
+            }},
+        ]},
         "output": {
-            "schema": {
+            "fields": [{"name": "result", "kind": "json", "required": True, "schema": {
                 "type": "object",
                 "properties": {
-                    "media_id": {"type": "string"}, "bytes": {"type": "integer"}, "params": {"type": "object"},
+                    "media_id": {"type": "string"}, "bytes": {"type": "integer"}, "options": {"type": "object"},
                     "started_at_ms": {"type": "integer"}, "pad": {"type": "string"},
                 },
-                "required": ["media_id", "bytes", "params", "started_at_ms"],
-            },
+                "required": ["media_id", "bytes", "options", "started_at_ms"],
+            }}],
             "agent_context": "none",
         },
     }

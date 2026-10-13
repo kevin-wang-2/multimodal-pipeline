@@ -37,7 +37,7 @@ class EngineTimeout(asyncio.TimeoutError):
 
 @dataclass
 class EngineResult:
-    result: object | None
+    outputs: dict | None
     timings_ms: dict
     retry: dict | None = None
     metrics: dict | None = None
@@ -140,14 +140,14 @@ class EngineProcess:
                 if fut is None or fut.done():
                     continue
                 if t == "result":
-                    fut.set_result(EngineResult(result=msg.get("result"), timings_ms=msg.get("timings_ms") or {},
+                    fut.set_result(EngineResult(outputs=msg.get("outputs"), timings_ms=msg.get("timings_ms") or {},
                                                 retry=msg.get("retry"), metrics=msg.get("metrics") or {}))
                 elif t == "error":
                     code = msg.get("error", "engine_failed")
                     if code == "cancelled":
                         fut.set_exception(EngineCancelled())
                     else:
-                        fut.set_exception(ApiError("bad_request" if code == "bad_params" else "engine_failed",
+                        fut.set_exception(ApiError("bad_request" if code == "bad_arguments" else "engine_failed",
                                                    msg.get("message") or code))
         finally:
             # 进程结束：所有在途任务失败

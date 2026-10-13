@@ -55,7 +55,7 @@ export class Broker {
 
   constructor(o: BrokerOptions) {
     this.nodeKey = o.nodeKey;
-    this.protocolVersion = o.protocolVersion ?? "2.0";
+    this.protocolVersion = o.protocolVersion ?? "3.0";
     this.inflightGraceSec = o.inflightGraceSec ?? 5;
     this.offlineAfter = (o.heartbeatIntervalSec ?? 10) * (o.missedHeartbeats ?? 3);
     this.now = o.now ?? (() => Date.now() / 1000);
@@ -145,7 +145,7 @@ export class Broker {
     });
     try {
       const resp = await Promise.race([link.send(req, controller.signal), timeout]);
-      return { status: resp.http_status, body: resp.body as Record<string, unknown> };
+      return { status: resp.http_status, body: resp.body as unknown as Record<string, unknown> };
     } finally {
       clearTimeout(timer);
     }

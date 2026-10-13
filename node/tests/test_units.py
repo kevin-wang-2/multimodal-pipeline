@@ -2,7 +2,7 @@
 import asyncio
 import re
 
-from mmp_node.cache import params_hash, task_key
+from mmp_node.cache import arguments_hash, task_key
 from mmp_node.config import apply_env, load_config
 from mmp_node.engine_io import EnginePool, EngineResult
 from mmp_node.ids import new_job_id, node_of, ulid
@@ -19,21 +19,20 @@ def test_ulid_and_job_id():
     assert node_of("garbage") is None
 
 
-def test_params_hash_is_canonical():
-    assert params_hash({"a": 1, "b": [1, 2]}) == params_hash({"b": [1, 2], "a": 1})
-    assert params_hash({"a": 1}) != params_hash({"a": 2})
-    k = task_key("sha256:" + "0" * 64, "echo", "cpu", "1", {})
-    assert k.startswith("sha256:") and k.count("|") == 4
-    assert task_key("m", "t", "cpu", "1", {}, "Audio/WAV; codecs=pcm") == task_key(
-        "m", "t", "cpu", "1", {}, "audio/wav"
-    )
+def test_arguments_hash_is_canonical():
+    assert arguments_hash({"a": 1, "b": [1, 2]}) == arguments_hash({"b": [1, 2], "a": 1})
+    assert arguments_hash({"a": 1}) != arguments_hash({"a": 2})
+    k = task_key("echo", "cpu", "1", {"media": {"media_id": "sha256:" + "0" * 64}})
+    assert k.startswith("echo|") and k.count("|") == 3
 
 
 def test_registry_filters_available_capabilities_by_media_facts():
     registry = Registry.__new__(Registry)
 
     def cap(id_: str, purpose: str, accepts: list[str], consumes: dict | None = None) -> dict:
-        out = {"id": id_, "purpose": purpose, "visibility": "public", "input": {"media": {"accepts": accepts}}}
+        out = {"id": id_, "purpose": purpose, "visibility": "public", "input": {"fields": [
+            {"name": "media", "kind": "media", "accepts": accepts}
+        ]}}
         if consumes is not None:
             out["consumes"] = consumes
         return out
@@ -104,7 +103,7 @@ async def test_keep_warm_gpu_is_evicted_for_heavy_then_restored(monkeypatch, tmp
                           tiers={(name, "gpu-fast"): tier})
 
     base, heavy = spec("image-base", True, 1024), spec("paddle-vl", False, 12288)
-    pool = EnginePool(5, 300, "2.0", [base, heavy], vram_total_mb=13000)
+    pool = EnginePool(5, 300, "3.0", [base, heavy], vram_total_mb=13000)
     pool.start()
     await asyncio.sleep(0)
     await asyncio.sleep(0)
@@ -141,7 +140,7 @@ async def test_keep_warm_gpu_stays_loaded_when_capacity_is_enough(monkeypatch, t
                       keep_warm=True, warm_priority=100, tiers=tier("image-base", 900))
     heavy = EngineSpec("paddle-vl", "x", ["x"], tmp_path, 5, [], resident_vram_mb=14000,
                        tiers=tier("paddle-vl", 14000))
-    pool = EnginePool(5, 300, "2.0", [base, heavy], vram_total_mb=16384, vram_headroom_mb=512)
+    pool = EnginePool(5, 300, "3.0", [base, heavy], vram_total_mb=16384, vram_headroom_mb=512)
     pool.start(); await asyncio.sleep(0); await asyncio.sleep(0)
     await pool.run(heavy, {"job_id": "x"}, 5, 14000)
     assert "stop:image-base" not in events

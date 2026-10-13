@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from .errors import ApiError
 
@@ -18,11 +17,10 @@ class Job:
     task_type: str
     priority: str
     tier: dict                    # 请求解析出的 TierSpec（可能在回落后被替换）
-    params: dict
-    media: dict                   # 原始句柄；put 端点从这里取
-    media_id: str
-    media_path: Path | None
-    content_type: str | None       # 本次提交解析出的原始 MIME；能力发现区分 audio/* / video/*
+    arguments: dict               # engine-io 使用的规范化命名输入；media 已解析为本地描述
+    media_ids: dict               # 字段名 → media_id 或 media_id[]，回显给调用方
+    media_content_types: dict      # 字段名 → MIME 或 MIME[]，供 digest 能力派生
+    delivery: dict                # media output 字段名 → PUT endpoint
     key: str
     seq: int
     bound: bool = False           # 由绑定 / WS 连接确定，客户端不能指定
@@ -32,8 +30,8 @@ class Job:
     finished_at: float | None = None
     cached: bool = False
     source: dict | None = None
-    result: object = None
-    result_ref: dict | None = None
+    outputs: dict | None = None
+    raw_outputs: dict | None = None       # engine 输出；media 仍含 data_base64，仅留在 A/cache 内部
     agent_context: dict | None = None
     usage: dict | None = None
     timings_ms: dict = field(default_factory=dict)
@@ -65,13 +63,10 @@ class Job:
 
     def response(self) -> tuple[int, dict]:
         """(http_status, body)，与协议.md §3.3 一一对应。"""
-        base = {"job_id": self.job_id, "type": self.task_type, "media_id": self.media_id}
+        base = {"job_id": self.job_id, "type": self.task_type, "media_ids": self.media_ids}
         if self.status == "done":
             body = {**base, "status": "done", "cached": self.cached, "source": self.source}
-            if self.result_ref is not None:
-                body["result_ref"] = self.result_ref
-            else:
-                body["result"] = self.result
+            body["outputs"] = self.outputs
             if self.agent_context is not None:
                 body["agent_context"] = self.agent_context
             if self.usage is not None:

@@ -53,12 +53,13 @@ async def main(wavs: list[Path]) -> int:
         for wav in wavs:
             data = wav.read_bytes()
             t0 = time.monotonic()
-            status, body = await broker.submit({"type": "triage.audio", "media": {"inline": base64.b64encode(data).decode()}, "wait": 120})
+            status, body = await broker.submit({"type": "triage.audio", "arguments": {
+                "media": {"inline": base64.b64encode(data).decode()}}, "wait": 120})
             wall = int((time.monotonic() - t0) * 1000)
             print(f"\n=== {wav.name} → HTTP {status} ({wall} ms wall, cached={body.get('cached')})")
             if status != 200:
                 print(json.dumps(body, ensure_ascii=False, indent=2)); failures.append(f"{wav.name}: HTTP {status}"); continue
-            d = body["result"]
+            d = body["outputs"]["digest"]["value"]
             context = (body.get("agent_context") or {}).get("text", "")
             if not (context.startswith("[mmp:agent-context start]") and
                     "kind=audio" in context and "缺口：" in context and
@@ -100,7 +101,8 @@ async def main(wavs: list[Path]) -> int:
                 if len(speech) != 6:
                     failures.append(f"26s: expected 6 speech segments, got {len(speech)}")
             # 第二次提交必须命中缓存
-            status2, body2 = await broker.submit({"type": "triage.audio", "media": {"inline": base64.b64encode(data).decode()}, "wait": 30})
+            status2, body2 = await broker.submit({"type": "triage.audio", "arguments": {
+                "media": {"inline": base64.b64encode(data).decode()}}, "wait": 30})
             if not (status2 == 200 and body2.get("cached") is True):
                 failures.append(f"{wav.name}: second submit not cached")
             elif body2.get("agent_context") != body.get("agent_context"):

@@ -51,7 +51,7 @@
     "engine_version": "m0-2026-09-10",
     "generated_at": "2026-09-10T17:00:00+08:00",
     "degraded": false,
-    "params": {
+    "arguments": {
       "label_confidence_threshold": 0.3
     }
   },

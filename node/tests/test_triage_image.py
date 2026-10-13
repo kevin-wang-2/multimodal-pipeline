@@ -62,8 +62,9 @@ def test_capability_only_exposes_base_tier():
     assert CAPABILITIES[0]["id"] == "triage.image"
     assert [t["tier"] for t in CAPABILITIES[0]["tiers"]] == ["gpu-fast"]
     assert CAPABILITIES[0]["purpose"] == "triage"
-    assert CAPABILITIES[0]["input"]["media"]["accepts"] == ["image/*"]
-    assert "pdf_dpi" not in CAPABILITIES[0]["input"]["params_schema"]["properties"]
+    fields = {field["name"]: field for field in CAPABILITIES[0]["input"]["fields"]}
+    assert fields["media"]["accepts"] == ["image/*"]
+    assert "pdf_dpi" not in fields["options"]["schema"]["properties"]
 
 
 def test_image_agent_context_carries_description_regions_provenance_and_gaps():
@@ -110,27 +111,28 @@ async def test_internal_large_stage_records_actual_source_and_cache(tmp_path):
         if spec.name == "triage_image":
             return EngineResult(None, {"caption": 1}, {"engine": "triage_image_large",
                                                        "reason": "description_nonempty"}, compute_ms=7)
-        digest, _ = build_digest(job["media_id"], "image/png", SURFACES, ["一张测试图片"],
+        digest, _ = build_digest(job["arguments"]["media"]["media_id"], "image/png", SURFACES, ["一张测试图片"],
                                  [RawRegion("image_0", "object", [1, 1, 20, 20], "phrase_grounding")], 0, .8, {})
-        return EngineResult(digest, {"caption": 2}, compute_ms=13)
+        return EngineResult({"digest": {"kind": "json", "value": digest}}, {"caption": 2}, compute_ms=13)
 
     stack.node.pool.run = fake_run
     media = {"inline": base64.b64encode(b"not-decoded-by-fake-engine").decode()}
-    first = await stack.submit(type="triage.image", media=media, wait=5)
+    first = await stack.submit(type="triage.image", arguments={"media": media}, wait=5)
     body = first.json()
     assert first.status_code == 200 and body["status"] == "done", body
     assert calls == [("triage_image", 768), ("triage_image_large", 2048)]
-    assert body["result"]["source"]["tier"] == "gpu"
-    assert body["result"]["source"]["engine"] == "florence-2-large-ft"
-    assert body["result"]["source"]["params"]["fallback_reason"] == "description_nonempty"
+    digest = body["outputs"]["digest"]["value"]
+    assert digest["source"]["tier"] == "gpu"
+    assert digest["source"]["engine"] == "florence-2-large-ft"
+    assert digest["source"]["arguments"]["fallback_reason"] == "description_nonempty"
     assert body["usage"] == {"served_from": "compute", "tier": "gpu", "engine": "florence-2-large-ft",
                              "compute_ms": 13, "wasted_ms": 7}
     assert body["agent_context"]["text"].startswith("[mmp:agent-context start]")
-    second = await stack.submit(type="triage.image", media=media, wait=5)
+    second = await stack.submit(type="triage.image", arguments={"media": media}, wait=5)
     assert second.json()["cached"] is True
     assert second.json()["usage"] == {"served_from": "cache", "tier": "gpu", "engine": "florence-2-large-ft",
                                       "compute_ms": 0, "wasted_ms": 0}
-    assert second.json()["result"]["source"] == body["result"]["source"]
+    assert second.json()["outputs"]["digest"]["value"]["source"] == digest["source"]
     assert second.json()["agent_context"] == body["agent_context"]
     await stack.client.aclose(); await stack.link.close(); await stack.node.close()
 
@@ -140,47 +142,37 @@ async def test_image_capability_rejects_non_image_content_type(tmp_path, content
     stack = await build_stack(tmp_path, engines={"triage_image": {"module": "engines.triage_image", "timeout_sec": 5}},
                               scheduler__vram_total_mb=1024)
     try:
-        response = await stack.submit(type="triage.image",
-                                      media={"inline": base64.b64encode(b"bytes").decode(),
-                                             "content_type": content_type}, wait=0)
+        response = await stack.submit(type="triage.image", arguments={"media": {
+            "inline": base64.b64encode(b"bytes").decode(), "content_type": content_type}}, wait=0)
         assert response.status_code == 400
         assert "does not accept content_type" in response.json()["message"]
     finally:
         await stack.client.aclose(); await stack.link.close(); await stack.node.close()
 
 
-async def test_image_agent_context_survives_result_ref_cache_hit(tmp_path):
+async def test_image_agent_context_is_recomputed_on_cache_hit(tmp_path):
     stack = await build_stack(tmp_path, engines={
         "triage_image": {"module": "engines.triage_image", "timeout_sec": 5},
         "ocr_structured": {"module": "engines.ocr_structured", "timeout_sec": 5},
     }, scheduler__vram_total_mb=16384, media__max_inline_result_bytes=1)
 
     async def fake_run(_spec, job, _timeout, _vram):
-        digest, _ = build_digest(job["media_id"], "image/png", SURFACES, ["a contract"],
+        digest, _ = build_digest(job["arguments"]["media"]["media_id"], "image/png", SURFACES, ["a contract"],
                                  [RawRegion("image_0", "contract", [1, 1, 20, 20], "phrase_grounding")], 0, .8, {})
-        return EngineResult(digest, {})
-
-    puts = []
-
-    async def fake_put(endpoint, data, _content_type):
-        puts.append((endpoint["url"], data))
+        return EngineResult({"digest": {"kind": "json", "value": digest}}, {})
 
     stack.node.pool.run = fake_run
-    stack.node.media.put = fake_put
-    handle = {"inline": base64.b64encode(b"image").decode(), "content_type": "image/png",
-              "put": {"url": "https://upload.example/result"}}
+    handle = {"inline": base64.b64encode(b"image").decode(), "content_type": "image/png"}
     try:
-        first = await stack.submit(type="triage.image", media=handle, wait=5)
-        assert first.status_code == 200 and "result_ref" in first.json()
-        assert b'"capabilities_available": ["ocr.structured"]' in puts[0][1]
+        first = await stack.submit(type="triage.image", arguments={"media": handle}, wait=5)
+        assert first.status_code == 200
+        assert first.json()["outputs"]["digest"]["value"]["capabilities_available"] == ["ocr.structured"]
         assert first.json()["agent_context"]["text"].startswith("[mmp:agent-context start]")
         del stack.node.registry.types["ocr.structured"]
-        second = await stack.submit(type="triage.image", media={"ref": first.json()["media_id"],
-                                    "put": {"url": "https://upload.example/result-v2"}}, wait=5)
+        second = await stack.submit(type="triage.image", arguments={"media": {
+            "ref": first.json()["media_ids"]["media"]}}, wait=5)
         assert second.json()["cached"] is True
         assert "可用能力：无" in second.json()["agent_context"]["text"]
-        assert second.json()["result_ref"] != first.json()["result_ref"]
-        assert puts[-1][0].endswith("result-v2")
-        assert b'"capabilities_available": []' in puts[-1][1]
+        assert second.json()["outputs"]["digest"]["value"]["capabilities_available"] == []
     finally:
         await stack.client.aclose(); await stack.link.close(); await stack.node.close()

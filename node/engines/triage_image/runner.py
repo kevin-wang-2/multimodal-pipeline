@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from engines.common.io import BadParams, serve
+from engines.common.io import BadArguments, serve
 from engines.ocr_structured.pages import UnsupportedDocument, sniff
 from engines.triage_image import PARAMS_SCHEMA
 from engines.triage_image.digest import RawRegion, build_digest
@@ -38,7 +38,7 @@ class Florence:
 def _params(raw: dict) -> dict:
     allowed = set(PARAMS_SCHEMA["properties"])
     if extra := set(raw) - allowed:
-        raise BadParams(f"unknown params {sorted(extra)}")
+        raise BadArguments(f"unknown options {sorted(extra)}")
     out = {k: v["default"] for k, v in PARAMS_SCHEMA["properties"].items() if "default" in v}
     out.update(raw)
     return out
@@ -64,11 +64,12 @@ def _surfaces(path: str):
 
 
 def analyze(model: Florence, job: dict) -> tuple[dict, str | None]:
-    p = _params(job.get("params") or {})
+    p = _params(job["arguments"].get("options") or {})
+    media = job["arguments"]["media"]
     try:
-        kind, items = _surfaces(job["media_path"])
+        kind, items = _surfaces(media["path"])
     except UnsupportedDocument as e:
-        raise BadParams(f"unsupported media: {e}") from e
+        raise BadArguments(f"unsupported media: {e}") from e
     captions, regions, timings = [], [], {"metadata": 0}
     malformed = 0
     for image, surface in items:
@@ -83,7 +84,7 @@ def analyze(model: Florence, job: dict) -> tuple[dict, str | None]:
             boxes, labels = output.get("bboxes", []), output.get("labels", [])
             malformed += abs(len(boxes) - len(labels))
             regions.extend(RawRegion(surface["id"], str(label), box, tool) for box, label in zip(boxes, labels))
-    return build_digest(job["media_id"], MIME[kind], [s for _, s in items], captions, regions,
+    return build_digest(media["media_id"], MIME[kind], [s for _, s in items], captions, regions,
                         malformed, p["region_dedupe_iou"], timings)
 
 
@@ -101,6 +102,6 @@ def main(engine: str, version: str, default_model: str, allow_retry: bool) -> No
         metrics = {"vram_peak_mb": round(model.torch.cuda.max_memory_allocated() / 1048576, 1)}
         if reason and allow_retry:
             return None, digest.get("timings_ms", {}), {"engine": "triage_image_large", "reason": reason}, metrics
-        return digest, digest.get("timings_ms", {}), None, metrics
+        return {"digest": {"kind": "json", "value": digest}}, digest.get("timings_ms", {}), None, metrics
 
     serve(engine, version, run)

@@ -41,10 +41,10 @@ def validator(ref: str) -> Draft202012Validator:
     return Draft202012Validator({"$ref": ref}, registry=_REG, format_checker=FormatChecker())
 
 
-V_ANY = validator("urn:mmp:protocol:2:job-api#/$defs/AnyResponse")
-V_ENV = validator("urn:mmp:protocol:2:ab-message")
-V_CAPS = validator("urn:mmp:protocol:2:job-api#/$defs/CapabilitiesResponse")
-V_HEALTH = validator("urn:mmp:protocol:2:job-api#/$defs/HealthResponse")
+V_ANY = validator("urn:mmp:protocol:3:job-api#/$defs/AnyResponse")
+V_ENV = validator("urn:mmp:protocol:3:ab-message")
+V_CAPS = validator("urn:mmp:protocol:3:job-api#/$defs/CapabilitiesResponse")
+V_HEALTH = validator("urn:mmp:protocol:3:job-api#/$defs/HealthResponse")
 
 
 def assert_valid(v: Draft202012Validator, data) -> None:
@@ -124,6 +124,18 @@ async def stack(tmp_path):
 # ---------- 媒体 ----------
 def inline(data: bytes) -> dict:
     return {"inline": base64.b64encode(data).decode()}
+
+
+def arguments(media: dict, options: dict | None = None) -> dict:
+    return {"media": media, **({"options": options} if options is not None else {})}
+
+
+def output(body: dict, name: str = "result"):
+    return body["outputs"][name]["value"]
+
+
+def media_id(body: dict, name: str = "media") -> str:
+    return body["media_ids"][name]
 
 
 def blob(n: int = 2000, seed: int = 0) -> bytes:

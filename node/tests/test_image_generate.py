@@ -82,7 +82,7 @@ async def test_forced_engine_kill_also_terminates_child(tmp_path):
     script.write_text("import subprocess, sys, time, json\n"
                       "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
                       f"open({str(pid_file)!r}, 'w').write(str(p.pid))\n"
-                      "print(json.dumps({'type':'hello','engine':'tree','engine_version':'1','protocol_version':'2.0'}), flush=True)\n"
+                      "print(json.dumps({'type':'hello','engine':'tree','engine_version':'1','protocol_version':'3.0'}), flush=True)\n"
                       "time.sleep(120)\n")
     process = EngineProcess(EngineSpec("tree", "tree", [sys.executable, str(script)], tmp_path, 5, []), 5, "3.0")
     await process.start()

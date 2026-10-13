@@ -69,6 +69,10 @@ export type MediaOutput = {
   content_type: string;
   bytes: number;
   sha256: string;
+  /**
+   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
+   */
+  media_id: string;
   inline?: string;
   delivered?: true;
 } & {

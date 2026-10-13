@@ -183,10 +183,11 @@
         "content_type": { "type": "string", "pattern": "^[a-z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+$" },
         "bytes": { "type": "integer", "minimum": 0 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "media_id": { "$ref": "urn:mmp:protocol:3:media-handle#/$defs/MediaId" },
         "inline": { "type": "string", "pattern": "^[A-Za-z0-9+/]*={0,2}$" },
         "delivered": { "const": true }
       },
-      "required": ["kind", "content_type", "bytes", "sha256"],
+      "required": ["kind", "content_type", "bytes", "sha256", "media_id"],
       "oneOf": [
         { "required": ["inline"], "not": { "required": ["delivered"] } },
         { "required": ["delivered"], "not": { "required": ["inline"] } }

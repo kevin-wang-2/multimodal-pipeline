@@ -325,7 +325,7 @@ export interface RegisterPayload {
   };
 }
 /**
- * 任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，register 时整表上报；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。
+ * 任务类型元数据（架构.md §10）。A 的注册表里每个任务类型一条，绑定 B 接收整表，远端 B 只接收 public 能力；B 的 GET /capabilities 汇总后给 C。预检（triage.*）与能力是同一套任务系统里的不同任务类型。
  */
 export interface Capability {
   /**

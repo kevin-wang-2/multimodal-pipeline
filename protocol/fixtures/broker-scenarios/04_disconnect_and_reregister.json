@@ -37,7 +37,8 @@
                   "type": "object"
                 },
                 "agent_context": "none"
-              }
+              },
+              "visibility": "public"
             }
           ],
           "engine_versions": {
@@ -173,7 +174,8 @@
                   "type": "object"
                 },
                 "agent_context": "none"
-              }
+              },
+              "visibility": "public"
             },
             {
               "id": "ocr.structured",
@@ -200,7 +202,8 @@
                   "type": "object"
                 },
                 "agent_context": "none"
-              }
+              },
+              "visibility": "public"
             }
           ],
           "engine_versions": {

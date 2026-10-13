@@ -40,5 +40,6 @@
   "output": {
     "schema": "digest",
     "agent_context": "required"
-  }
+  },
+  "visibility": "public"
 }

@@ -50,7 +50,7 @@ test("request timeout aborts transport pending without dropping the node", async
   broker.onRegister({
     type: "register", protocol_version: "2.0", ts: "2026-09-21T00:00:00Z",
     payload: { node_id: "node-a", node_key: "scenario-node-key-0123456789", capabilities: [{
-      id: "echo", purpose: "diagnostic", tiers: [{ tier: "cpu", engine: "e-echo", engine_version: "1", cost: "low" }],
+      id: "echo", visibility: "public", purpose: "diagnostic", tiers: [{ tier: "cpu", engine: "e-echo", engine_version: "1", cost: "low" }],
       input: { media: { presence: "required", accepts: ["*/*"] } },
       output: { schema: { type: "object" }, agent_context: "none" },
     }], engine_versions: { "e-echo": "1" } },
@@ -61,6 +61,29 @@ test("request timeout aborts transport pending without dropping the node", async
   assert.equal(reply.body.error, "timeout");
   assert.equal(aborted, true);
   assert.equal(broker.health().body.status, "ok");
+});
+
+test("remote Broker excludes internal capabilities and their engine versions", async () => {
+  const broker = new Broker({ nodeKey: "scenario-node-key-0123456789" });
+  const capability = { id: "echo", visibility: "public", purpose: "diagnostic",
+    tiers: [{ tier: "cpu", engine: "public-engine", engine_version: "1", cost: "low" }],
+    input: { media: { presence: "required", accepts: ["*/*"] } },
+    output: { schema: { type: "object" }, agent_context: "none" } };
+  let calls = 0;
+  broker.onRegister({ type: "register", protocol_version: "2.0", payload: {
+    node_id: "node-a", node_key: "scenario-node-key-0123456789",
+    capabilities: [capability, { ...capability, id: "echo.internal", visibility: "internal",
+      tiers: [{ tier: "cpu", engine: "private-engine", engine_version: "secret", cost: "low" }] }],
+    engine_versions: { "public-engine": "1", "private-engine": "secret" },
+  } }, async (request) => {
+    calls++;
+    return { req_id: request.req_id, http_status: 404, body: { error: "not_found" } } as ResponsePayload;
+  });
+  assert.deepEqual(broker.nodes.get("node-a")!.capabilities.map((c) => c.id), ["echo"]);
+  assert.deepEqual(broker.nodes.get("node-a")!.engineVersions, { "public-engine": "1" });
+  const denied = await broker.submit({ type: "echo.internal", media: { inline: "dGVzdA==" } });
+  assert.equal(denied.body.error, "no_node");
+  assert.equal(calls, 0);
 });
 
 for (const file of readdirSync(DIR).filter((f) => f.endsWith(".json")).sort()) {

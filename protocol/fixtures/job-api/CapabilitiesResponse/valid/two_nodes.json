@@ -44,7 +44,8 @@
         "output": {
           "schema": "urn:mmp:protocol:1:digest",
           "agent_context": "required"
-        }
+        },
+        "visibility": "public"
       },
       "nodes": [
         "mac-m1",
@@ -110,7 +111,8 @@
             ]
           },
           "agent_context": "none"
-        }
+        },
+        "visibility": "public"
       },
       "nodes": [
         "gpu-box"

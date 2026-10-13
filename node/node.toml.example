@@ -72,3 +72,20 @@ timeout_sec = 30                    # 单任务时限；超时且无更便宜档
 # resident_vram_mb = 1536
 # run_vram_mb = 2048
 # env = { MMP_FLORENCE_MODEL = "C:/mmp/models/Florence-2-large-ft-native" }
+
+# Krea 与其他 GPU 引擎共用容量调度；不保温，任务结束后进程退出。
+# ComfyUI 与权重安装在独立目录，环境需支持 CUDA 的 PyTorch。
+# [engines.image_generate]
+# module = "engines.image_generate"
+# python = "C:/mmp/envs/krea2/Scripts/python.exe"
+# timeout_sec = 900
+# keep_warm = false
+# env = { MMP_COMFY_ROOT = "C:/ai/krea2/ComfyUI", MMP_KREA_RESERVE_VRAM_GB = "4" }
+
+# 内部版仅绑定 B 可用；与普通版共用同一个 EnginePool，不同时驻留。
+# [engines.image_generate_internal]
+# module = "engines.image_generate_internal"
+# python = "C:/mmp/envs/krea2/Scripts/python.exe"
+# timeout_sec = 900
+# keep_warm = false
+# env = { MMP_COMFY_ROOT = "C:/ai/krea2/ComfyUI", MMP_KREA_RESERVE_VRAM_GB = "4", MMP_KREA_DIFFUSION_MODEL = "moodyKrea2Mix_v3-Global-FP8.safetensors", MMP_KREA_TEXT_ENCODER = "qwen3VL4BAbliteratedComfyui_FP8.safetensors" }

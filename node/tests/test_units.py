@@ -33,7 +33,7 @@ def test_registry_filters_available_capabilities_by_media_facts():
     registry = Registry.__new__(Registry)
 
     def cap(id_: str, purpose: str, accepts: list[str], consumes: dict | None = None) -> dict:
-        out = {"id": id_, "purpose": purpose, "input": {"media": {"accepts": accepts}}}
+        out = {"id": id_, "purpose": purpose, "visibility": "public", "input": {"media": {"accepts": accepts}}}
         if consumes is not None:
             out["consumes"] = consumes
         return out

@@ -1,0 +1,28 @@
+{
+  "id": "echo",
+  "description": "S1 \u7528\uff1a\u539f\u6837\u8fd4\u56de\u5a92\u4f53 hash \u4e0e params\u3002",
+  "tiers": [
+    {
+      "tier": "cpu",
+      "engine": "echo",
+      "engine_version": "1",
+      "cost": "low"
+    }
+  ],
+  "input": {
+    "media": {
+      "presence": "required",
+      "accepts": [
+        "*/*"
+      ]
+    }
+  },
+  "purpose": "diagnostic",
+  "output": {
+    "schema": {
+      "type": "object"
+    },
+    "agent_context": "none"
+  },
+  "visibility": "private"
+}

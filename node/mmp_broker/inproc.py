@@ -21,19 +21,19 @@ class InProcLink:
     async def _send(self, request_payload: dict) -> dict:
         # B → A 的 request 信封；A 回 response 信封。与 ws 上传的是同一份 JSON。
         env = self.node.envelope("request", request_payload)
-        resp_env = self.node.envelope("response", await self.node.dispatch(env["payload"]))
+        resp_env = self.node.envelope("response", await self.node.dispatch(env["payload"], bound=True))
         return resp_env["payload"]
 
     async def connect(self) -> None:
         # 抛 RegisterRejected 即启动失败（对应 ws 关闭码）
-        self.broker.on_register(self.node.register_message(), self._send)
-        self.broker.on_heartbeat(self.node.heartbeat_message())
+        self.broker.on_register(self.node.register_message(bound=True), self._send, bound=True)
+        self.broker.on_heartbeat(self.node.heartbeat_message(bound=True))
         self._hb = asyncio.create_task(self._heartbeat_loop(), name="mmp-inproc-heartbeat")
 
     async def _heartbeat_loop(self) -> None:
         while True:
             await asyncio.sleep(self.interval)
-            self.broker.on_heartbeat(self.node.heartbeat_message())
+            self.broker.on_heartbeat(self.node.heartbeat_message(bound=True))
 
     async def close(self) -> None:
         if self._hb:

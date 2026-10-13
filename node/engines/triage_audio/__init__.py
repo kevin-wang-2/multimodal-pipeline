@@ -26,6 +26,7 @@ PARAMS_SCHEMA = {
 CAPABILITIES = [
     {
         "id": "triage.audio",
+        "visibility": "public",
         "purpose": "triage",
         "description": "音频预检：VAD 定界 + 段级粗类别打标 + 语音段 ASR，产出带时间轴的 digest（原子事实 + gaps + 可用能力清单）。",
         "tiers": [

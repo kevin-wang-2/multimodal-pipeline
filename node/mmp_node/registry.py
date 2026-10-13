@@ -98,15 +98,16 @@ class Registry:
     def engine_for(self, task_type: str, tier: str) -> EngineSpec:
         return self.engines[self.type_engine[(task_type, tier)]]
 
-    def engine_versions(self) -> dict[str, str]:
+    def engine_versions(self, *, include_internal: bool = False) -> dict[str, str]:
         out: dict[str, str] = {}
-        for cap in self.types.values():
+        for cap in self.capabilities(include_internal=include_internal):
             for t in cap["tiers"]:
                 out[t["engine"]] = t["engine_version"]
         return out
 
-    def capabilities(self) -> list[dict]:
-        return list(self.types.values())
+    def capabilities(self, *, include_internal: bool = False) -> list[dict]:
+        return [cap for cap in self.types.values()
+                if include_internal or cap["visibility"] == "public"]
 
     @staticmethod
     def _matches_media_type(pattern: str, content_type: str) -> bool:
@@ -139,7 +140,8 @@ class Registry:
             )
         return False
 
-    def capabilities_for_digest(self, digest: dict, content_type: str | None = None) -> list[str]:
+    def capabilities_for_digest(self, digest: dict, content_type: str | None = None,
+                                *, include_internal: bool = False) -> list[str]:
         """按原始 MIME 与预检事实筛选显式能力；不在此替 Harness 推断调用意图。"""
         if digest.get("kind") == "image":
             media_type = digest.get("format")
@@ -152,7 +154,7 @@ class Registry:
 
         labels = self._digest_labels(digest)
         available: list[str] = []
-        for cap in self.types.values():
+        for cap in self.capabilities(include_internal=include_internal):
             if cap.get("purpose") in {"triage", "diagnostic"}:
                 continue
             accepts = cap.get("input", {}).get("media", {}).get("accepts", [])
@@ -167,11 +169,12 @@ class Registry:
             available.append(cap["id"])
         return sorted(available)
 
-    def populate_capabilities_available(self, result: object, content_type: str | None = None) -> bool:
+    def populate_capabilities_available(self, result: object, content_type: str | None = None,
+                                        *, include_internal: bool = False) -> bool:
         """把注册表派生信息覆盖进 digest，返回内容是否变化。"""
         if not isinstance(result, dict) or result.get("kind") not in {"audio", "image"}:
             return False
-        available = self.capabilities_for_digest(result, content_type)
+        available = self.capabilities_for_digest(result, content_type, include_internal=include_internal)
         changed = result.get("capabilities_available") != available
         result["capabilities_available"] = available
         return changed

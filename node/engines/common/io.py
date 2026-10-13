@@ -15,7 +15,7 @@ import threading
 import traceback
 from typing import Awaitable, Callable
 
-PROTOCOL_VERSION = "2.0"
+PROTOCOL_VERSION = "3.0"
 RunFn = Callable[[dict, asyncio.Event], Awaitable[tuple]]
 
 # 协议帧只走原始 stdout 的字节流；之后把 sys.stdout 指到 stderr，第三方库的 print 就污染不了 JSON 流
@@ -23,7 +23,7 @@ _PROTO_OUT = sys.stdout.buffer
 sys.stdout = sys.stderr
 
 
-class BadParams(Exception):
+class BadArguments(Exception):
     pass
 
 
@@ -71,7 +71,7 @@ async def _serve(engine: str, engine_version: str, run: RunFn) -> None:
     async def handle(rid: str, job: dict, cancelled: asyncio.Event) -> None:
         try:
             outcome = await run(job, cancelled)
-            result, timings = outcome[:2]
+            outputs, timings = outcome[:2]
             retry = outcome[2] if len(outcome) > 2 else None
             metrics = outcome[3] if len(outcome) > 3 else None
             if cancelled.is_set():
@@ -79,7 +79,7 @@ async def _serve(engine: str, engine_version: str, run: RunFn) -> None:
             else:
                 msg = {"type": "result", "id": rid, "timings_ms": timings}
                 if retry is None:
-                    msg["result"] = result
+                    msg["outputs"] = outputs
                 else:
                     msg["retry"] = retry
                 if metrics:
@@ -87,8 +87,8 @@ async def _serve(engine: str, engine_version: str, run: RunFn) -> None:
                 _emit(msg)
         except asyncio.CancelledError:
             _emit({"type": "error", "id": rid, "error": "cancelled"})
-        except BadParams as e:
-            _emit({"type": "error", "id": rid, "error": "bad_params", "message": str(e)})
+        except BadArguments as e:
+            _emit({"type": "error", "id": rid, "error": "bad_arguments", "message": str(e)})
         except Exception as e:
             _emit({"type": "error", "id": rid, "error": "engine_failed", "message": f"{type(e).__name__}: {e}"})
             log(traceback.format_exc(), "error")

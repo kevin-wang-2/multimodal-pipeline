@@ -32,7 +32,7 @@ env = { MMP_MODELS_DIR = "/path/to/models", MMP_ENGINE_THREADS = "4" }
 
 启动即加载三件套并用 1s 静音预热（onnxruntime 首次推理有几百 ms 一次性开销），加载完才发 `hello`。
 
-## params
+## `arguments.options`
 
 | 名 | 默认 | 说明 |
 |---|---|---|

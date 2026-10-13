@@ -21,26 +21,33 @@ CAPABILITIES = [{
     "id": "image.generate",
     "visibility": "public",
     "purpose": "image.generate",
-    "description": "Krea 2 Turbo FP8 文生图：media 为 UTF-8 text/plain 提示词；8 步生成单张 PNG，"
-                   "最多 1048576 像素。结果含 PNG base64；大结果需提供 media.put（接收 JSON）。",
+    "description": "Krea 2 Turbo FP8 文生图：接受命名 prompt 与 options，8 步生成单张 PNG。",
     "tiers": [{"tier": "gpu", "engine": ENGINE, "engine_version": ENGINE_VERSION,
                "cost": "high", "vram_mb": 12000, "max_concurrency": 1}],
-    "input": {"media": {"presence": "required", "accepts": ["text/plain"]},
-              "params_schema": PARAMS_SCHEMA},
+    "input": {"fields": [
+        {"name": "prompt", "kind": "text", "required": True,
+         "description": "图像生成提示词", "schema": {"type": "string", "minLength": 1, "maxLength": 4000}},
+        {"name": "options", "kind": "json", "required": False,
+         "description": "尺寸与随机种子", "schema": PARAMS_SCHEMA},
+    ]},
     "output": {
         "agent_context": "none",
-        "schema": {
+        "fields": [
+          {"name": "image", "kind": "media", "required": True,
+           "description": "生成的单张图片", "produces": ["image/png"],
+           "cardinality": {"min": 1, "max": 1}},
+          {"name": "metadata", "kind": "json", "required": True,
+           "description": "生成参数与耗时", "schema": {
             "type": "object",
             "properties": {
-                "content_type": {"const": "image/png"},
-                "data_base64": {"type": "string", "minLength": 4},
                 "width": {"type": "integer", "minimum": 1},
                 "height": {"type": "integer", "minimum": 1},
                 "seed": {"type": "integer", "minimum": 0},
                 "timings_ms": {"type": "object"},
             },
-            "required": ["content_type", "data_base64", "width", "height", "seed"],
+            "required": ["width", "height", "seed"],
             "additionalProperties": False,
-        },
+          }},
+        ],
     },
 }]

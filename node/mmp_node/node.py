@@ -44,7 +44,7 @@ class Node:
         self.sched = Scheduler(cfg, self.registry, self.pool, self.cache, self.media)
         self.jobs: dict[str, Job] = {}
         self._seq = 0
-        self._param_validators: dict[str, Draft202012Validator] = {}
+        self._field_validators: dict[tuple[str, str], Draft202012Validator] = {}
         self._gc_task: asyncio.Task | None = None
 
     def _check_vram_budget(self) -> None:
@@ -93,40 +93,27 @@ class Node:
         if cap["visibility"] == "internal" and not bound:
             raise ApiError("unsupported_type", f"unknown task type {task_type!r}")
         tier = self.registry.resolve_tier(task_type, req.get("tier"))
-        params = self._normalize_params(cap, req.get("params") or {})
-        self._validate_params(cap, params)
         priority = req.get("priority", "interactive")
         wait_s = float(req.get("wait", 0) if wait is None else wait)
 
         self.sched.check_backpressure()          # 先于取媒体：别为了说 429 先下载 100MB
         t_fetch = time.monotonic()
-        fetched = await self.media.fetch(req["media"])
-        self._validate_media_type(cap, fetched.content_type)
+        delivery = self._validate_delivery(cap, req.get("delivery") or {})
+        arguments, media_ids, media_types, cache_arguments = await self._prepare_arguments(cap, req.get("arguments") or {})
         fetch_ms = int((time.monotonic() - t_fetch) * 1000)
-        cache_content_type = (fetched.content_type
-                              if cap["output"]["schema"] == schemas.DIGEST_ID else None)
-        key = task_key(fetched.media_id, task_type, tier["tier"], tier["engine_version"], params,
-                       cache_content_type, bound=bound)
+        key = task_key(task_type, tier["tier"], tier["engine_version"], cache_arguments, bound=bound)
 
         hit = self.cache.get(key)
-        if hit is not None and hit.get("result") is None:
-            hit = None
         if hit is not None:
-            job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, None,
-                                fetched.content_type, key, bound)
+            job = self._new_job(task_type, priority, tier, arguments, media_ids, media_types, delivery, key, bound)
             job.cached, job.source = True, hit["source"]
             job.timings_ms = {"fetch": fetch_ms}
             job.usage = {"served_from": "cache", "tier": job.source["tier"], "engine": job.source["engine"],
                          "compute_ms": 0, "wasted_ms": 0}
-            result = hit["result"]
-            capabilities_changed = self.registry.populate_capabilities_available(
-                result, job.content_type, include_internal=bound)
-            job.agent_context = self.sched._agent_context(job, result)
-            # 缓存保存计算结果；交付始终使用本次请求的 PUT 地址和内联上限。
-            await self.sched._place_result(job, result)
-            if capabilities_changed:
-                self.cache.put(key, job.media_id, job.task_type, job.tier["tier"], job.tier["engine_version"],
-                               job.source, result, job.result_ref, job.timings_ms)
+            job.raw_outputs = hit["outputs"]
+            job.raw_outputs = self.sched._finish_outputs(job, job.raw_outputs)
+            job.agent_context = self.sched._agent_context(job, job.raw_outputs)
+            await self.sched._place_outputs(job, job.raw_outputs)
             job.finish("done")
             self.jobs[job.job_id] = job
             log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
@@ -135,20 +122,21 @@ class Node:
                                 ensure_ascii=False))
             return job.response()
 
-        active = self.sched.find_active(key, req["media"].get("put"))
+        active = self.sched.find_active(key, delivery)
         if active is not None:
             await active.wait(wait_s)
             return active.response()
 
-        job = self._new_job(task_type, priority, tier, params, req["media"], fetched.media_id, fetched.path,
-                            fetched.content_type, key, bound)
+        job = self._new_job(task_type, priority, tier, arguments, media_ids, media_types, delivery, key, bound)
         job.timings_ms["fetch"] = fetch_ms       # ref 命中时 ≈ 0：这就是"没重复拉"的证据
         self.jobs[job.job_id] = job
-        self.media.pin(job.media_id)          # 排队 / 运行期间不许被 LRU 淘汰；scheduler 收尾时 unpin
+        for media_id in self._all_media_ids(job):
+            self.media.pin(media_id)
         try:
             self.sched.enqueue(job)
         except ApiError:
-            self.media.unpin(job.media_id)
+            for media_id in self._all_media_ids(job):
+                self.media.unpin(media_id)
             raise
         await job.wait(wait_s)
         return job.response()
@@ -167,12 +155,11 @@ class Node:
 
     def _response(self, job: Job, *, bound: bool) -> tuple[int, dict]:
         status, body = job.response()
-        if not bound and job.bound and isinstance(body.get("result"), dict):
+        if job.status == "done" and job.bound and not bound:
             body = copy.deepcopy(body)
-            if self.registry.populate_capabilities_available(body["result"], job.content_type):
-                context = self.sched._agent_context(job, body["result"])
-                if context is not None:
-                    body["agent_context"] = context
+            for output in body.get("outputs", {}).values():
+                if isinstance(output, dict) and output.get("kind") == "json":
+                    self.registry.populate_capabilities_available(output.get("value"), include_internal=False)
         return status, body
 
     def _job(self, job_id: str, *, bound: bool) -> Job:
@@ -181,46 +168,104 @@ class Node:
             raise ApiError("not_found", f"unknown job {job_id}")
         return job
 
-    def _new_job(self, task_type, priority, tier, params, media, media_id, media_path, content_type, key, bound) -> Job:
+    def _new_job(self, task_type, priority, tier, arguments, media_ids, media_types, delivery, key, bound) -> Job:
         self._seq += 1
-        return Job(job_id=new_job_id(self.node_id), task_type=task_type, priority=priority, tier=tier, params=params,
-                   media=media, media_id=media_id, media_path=media_path, content_type=content_type,
+        return Job(job_id=new_job_id(self.node_id), task_type=task_type, priority=priority, tier=tier,
+                   arguments=arguments, media_ids=media_ids, media_content_types=media_types, delivery=delivery,
                    key=key, seq=self._seq, bound=bound)
 
     @staticmethod
-    def _normalize_params(cap: dict, params: dict) -> dict:
-        """补 params_schema 顶层属性的 default：source.params 记录实际生效值，缓存键也不因"省略 vs 写默认值"而分叉。"""
-        schema = cap.get("input", {}).get("params_schema") or {}
-        out = dict(params)
+    def _normalize_json(schema: dict, value: dict) -> dict:
+        out = dict(value)
         for name, prop in (schema.get("properties") or {}).items():
             if name not in out and isinstance(prop, dict) and "default" in prop:
                 out[name] = prop["default"]
         return out
 
-    def _validate_params(self, cap: dict, params: dict) -> None:
-        schema = cap.get("input", {}).get("params_schema")
-        if schema is None:
-            if params:
-                raise ApiError("bad_request", f"{cap['id']} accepts no params")
-            return
-        v = self._param_validators.get(cap["id"])
-        if v is None:
-            v = self._param_validators[cap["id"]] = Draft202012Validator(schema)
-        errs = list(v.iter_errors(params))
-        if errs:
-            raise ApiError("bad_request", "params: " + "; ".join(e.message for e in errs[:3]))
+    async def _prepare_arguments(self, cap: dict, raw: dict) -> tuple[dict, dict, dict, dict]:
+        fields = {field["name"]: field for field in cap["input"]["fields"]}
+        if extra := set(raw) - set(fields):
+            raise ApiError("bad_request", f"unknown arguments {sorted(extra)}")
+        arguments, media_ids, media_types, cache_arguments = {}, {}, {}, {}
+        for name, field in fields.items():
+            if field["required"] and name not in raw:
+                raise ApiError("bad_request", f"missing required argument {name!r}")
+        # 先验证不需要 I/O 的字段；错误 prompt/options 不应触发媒体下载。
+        for name, field in fields.items():
+            if field["kind"] == "media":
+                continue
+            if name not in raw:
+                if field["kind"] == "json":
+                    value = self._normalize_json(field["schema"], {})
+                    if value:
+                        arguments[name] = cache_arguments[name] = value
+                continue
+            value = raw[name]
+            if field["kind"] == "text" and not isinstance(value, str):
+                raise ApiError("bad_request", f"arguments.{name} must be text")
+            if field["kind"] == "json" and isinstance(value, dict):
+                value = self._normalize_json(field["schema"], value)
+            validator = self._field_validators.setdefault((cap["id"], name), Draft202012Validator(field["schema"]))
+            errs = list(validator.iter_errors(value))
+            if errs:
+                raise ApiError("bad_request", f"arguments.{name}: " + "; ".join(e.message for e in errs[:3]))
+            arguments[name] = cache_arguments[name] = value
+        for name, field in fields.items():
+            if field["kind"] != "media" or name not in raw:
+                continue
+            value = raw[name]
+            many = field["cardinality"]["max"] != 1
+            handles = value if many and isinstance(value, list) else [value]
+            if not isinstance(handles, list) or not all(isinstance(item, dict) for item in handles):
+                raise ApiError("bad_request", f"arguments.{name} must be a media handle{' array' if many else ''}")
+            if not field["cardinality"]["min"] <= len(handles) <= field["cardinality"]["max"]:
+                raise ApiError("bad_request", f"arguments.{name} violates media cardinality")
+            handle_validator = schemas.validator_for_ref("urn:mmp:protocol:3:media-handle")
+            for handle in handles:
+                errs = schemas.errors(handle_validator, handle)
+                if errs:
+                    raise ApiError("bad_request", f"arguments.{name}: " + "; ".join(errs[:3]))
+            fetched = [await self.media.fetch(handle) for handle in handles]
+            for item in fetched:
+                self._validate_media_type(cap["id"], field, item.content_type)
+            resolved = [{"media_id": item.media_id, "path": str(item.path),
+                         **({"content_type": item.content_type} if item.content_type else {})} for item in fetched]
+            cached = [{"media_id": item.media_id, **({"content_type": item.content_type} if item.content_type else {})}
+                      for item in fetched]
+            ids = [item.media_id for item in fetched]
+            types = [item.content_type for item in fetched]
+            arguments[name] = resolved if many else resolved[0]
+            cache_arguments[name] = cached if many else cached[0]
+            media_ids[name] = ids if many else ids[0]
+            media_types[name] = types if many else types[0]
+        return arguments, media_ids, media_types, cache_arguments
 
     @staticmethod
-    def _validate_media_type(cap: dict, content_type: str | None) -> None:
+    def _validate_delivery(cap: dict, delivery: dict) -> dict:
+        media_outputs = {field["name"]: field for field in cap["output"]["fields"] if field["kind"] == "media"}
+        if extra := set(delivery) - set(media_outputs):
+            raise ApiError("bad_request", f"delivery names unknown media outputs {sorted(extra)}")
+        for name, endpoint in delivery.items():
+            many = media_outputs[name]["cardinality"]["max"] != 1
+            if many != isinstance(endpoint, list):
+                raise ApiError("bad_request", f"delivery.{name} must be {'an endpoint array' if many else 'one endpoint'}")
+        return delivery
+
+    @staticmethod
+    def _all_media_ids(job: Job) -> list[str]:
+        return [item for value in job.media_ids.values() for item in (value if isinstance(value, list) else [value])]
+
+    @staticmethod
+    def _validate_media_type(capability_id: str, field: dict, content_type: str | None) -> None:
         if content_type is None:
             return
         actual = content_type.split(";", 1)[0].strip().lower()
-        accepts = cap["input"]["media"]["accepts"]
+        accepts = field["accepts"]
         matched = any(pattern == "*/*" or pattern == actual or
                       (pattern.endswith("/*") and actual.startswith(pattern[:-1]))
                       for pattern in accepts)
         if not matched:
-            raise ApiError("bad_request", f"{cap['id']} does not accept content_type {actual!r}")
+            raise ApiError("bad_request", f"{capability_id}.{field['name']} does not accept content_type {actual!r}")
 
     # ---- A↔B 消息的 A 侧 ----
     def envelope(self, type_: str, payload: dict) -> dict:

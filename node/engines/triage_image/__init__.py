@@ -24,9 +24,13 @@ CAPABILITIES = [{
         "tier": "gpu-fast", "engine": ENGINE, "engine_version": ENGINE_VERSION, "cost": "low",
         "latency_hint": "~0.4-0.8s/surface warm", "vram_mb": 768, "max_concurrency": 1,
     }],
-    "input": {"media": {"presence": "required", "accepts": ["image/*"]},
-              "params_schema": PARAMS_SCHEMA},
-    "output": {"schema": "urn:mmp:protocol:2:digest", "agent_context": "required"},
+    "input": {"fields": [
+        {"name": "media", "kind": "media", "required": True, "accepts": ["image/*"],
+         "cardinality": {"min": 1, "max": 1}},
+        {"name": "options", "kind": "json", "required": False, "schema": PARAMS_SCHEMA},
+    ]},
+    "output": {"fields": [{"name": "digest", "kind": "json", "required": True,
+                              "schema": "urn:mmp:protocol:3:digest"}], "agent_context": "required"},
 }]
 
 AGENT_CONTEXT_PRESENTERS = {"triage.image": render_agent_context}

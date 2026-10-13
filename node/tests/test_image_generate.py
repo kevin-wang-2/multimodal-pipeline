@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import build_stack, inline
+from conftest import build_stack
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from engines.image_generate import ENGINE, ENGINE_VERSION
 from engines.image_generate.runner import request
@@ -27,11 +27,14 @@ async def test_generation_uses_queue_put_and_cache_without_resident_process(monk
             events.append("start")
 
         async def run(self, job, timeout_sec):
-            prompt, params = Path(job["media_path"]).read_text(), job["params"]
+            prompt, params = job["arguments"]["prompt"], job["arguments"].get("options", {})
+            params = {"width": 1024, "height": 1024, "seed": 42, **params}
             assert prompt == "A hand painted game village"
             events.append("generate")
-            return EngineResult({"content_type": "image/png", "data_base64": "AAAA" * 2000,
-                                 **params}, {})
+            return EngineResult({
+                "image": {"kind": "media", "content_type": "image/png", "data_base64": "AAAA" * 2000},
+                "metadata": {"kind": "json", "value": params},
+            }, {})
 
         async def shutdown(self):
             self.alive = False
@@ -41,21 +44,22 @@ async def test_generation_uses_queue_put_and_cache_without_resident_process(monk
     stack = await build_stack(tmp_path, engines={"image_generate": {
         "module": "engines.image_generate", "timeout_sec": 30}}, scheduler__vram_total_mb=16303)
     try:
-        media = {**inline(b"A hand painted game village"), "content_type": "text/plain",
-                 "put": media_server.put_endpoint("/image.json")}
-        done = (await stack.submit(type="image.generate", media=media, wait=5)).json()
+        request_body = {"type": "image.generate", "arguments": {"prompt": "A hand painted game village"},
+                        "delivery": {"image": media_server.put_endpoint("/image.png")}, "wait": 5}
+        done = (await stack.submit(**request_body)).json()
         assert done["status"] == "done", done
         assert done["source"]["engine"] == ENGINE
         assert done["source"]["engine_version"] == ENGINE_VERSION
-        assert done["result_ref"]["content_type"] == "application/json"
-        image = json.loads(media_server.puts["/image.json"])
-        assert image["width"] == image["height"] == 1024 and image["seed"] == 42
+        assert done["outputs"]["image"]["content_type"] == "image/png"
+        assert done["outputs"]["image"]["delivered"] is True
+        assert done["outputs"]["metadata"]["value"] == {"width": 1024, "height": 1024, "seed": 42}
+        image = media_server.puts["/image.png"]
         assert events == ["start", "generate", "stop"]
         assert stack.node.pool.loaded() == []
-        cached = (await stack.submit(type="image.generate", media={**media,
-            "put": media_server.put_endpoint("/second-image.json")}, wait=5)).json()
+        cached = (await stack.submit(type="image.generate", arguments=request_body["arguments"],
+            delivery={"image": media_server.put_endpoint("/second-image.png")}, wait=5)).json()
         assert cached["cached"] is True and cached["usage"]["compute_ms"] == 0
-        assert json.loads(media_server.puts["/second-image.json"]) == image
+        assert media_server.puts["/second-image.png"] == image
         assert events == ["start", "generate", "stop"]
     finally:
         await stack.client.aclose()
@@ -66,10 +70,8 @@ async def test_generation_uses_queue_put_and_cache_without_resident_process(monk
 @pytest.mark.parametrize("raw,params", [(b"\xff", {}), (b" ", {}),
                                        (b"village", {"width": 1536, "height": 1536})])
 def test_invalid_prompt_fails_before_model_loading(tmp_path, raw, params):
-    path = tmp_path / "prompt.txt"
-    path.write_bytes(raw)
     with pytest.raises(ValueError):
-        request({"media_path": str(path), "params": params})
+        request({"arguments": {"prompt": raw.decode("utf-8", errors="ignore"), "options": params}})
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows venv process tree")
@@ -82,7 +84,7 @@ async def test_forced_engine_kill_also_terminates_child(tmp_path):
                       f"open({str(pid_file)!r}, 'w').write(str(p.pid))\n"
                       "print(json.dumps({'type':'hello','engine':'tree','engine_version':'1','protocol_version':'2.0'}), flush=True)\n"
                       "time.sleep(120)\n")
-    process = EngineProcess(EngineSpec("tree", "tree", [sys.executable, str(script)], tmp_path, 5, []), 5, "2.0")
+    process = EngineProcess(EngineSpec("tree", "tree", [sys.executable, str(script)], tmp_path, 5, []), 5, "3.0")
     await process.start()
     kernel = ctypes.windll.kernel32
     kernel.OpenProcess.restype = ctypes.c_void_p

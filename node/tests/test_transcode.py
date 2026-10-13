@@ -7,7 +7,7 @@ import wave
 
 import pytest
 
-from conftest import blob, build_stack, inline
+from conftest import arguments, blob, build_stack, inline, media_id, output
 from mmp_node.transcode import sniff_audio
 
 from mmp_node.transcode import find_ffmpeg
@@ -34,26 +34,26 @@ async def test_m4a_is_transcoded_to_16k_mono_wav_for_audio_engines(tmp_path):
     m4a = tmp_path / "tone.m4a"
     _make_m4a(m4a)
     s = await build_stack(tmp_path)
-    s.node.registry.types["echo"]["input"]["media"]["preprocessor"] = "audio.to_wav_16k_mono"
+    s.node.registry.types["echo"]["input"]["fields"][0]["preprocessor"] = "audio.to_wav_16k_mono"
     try:
-        r = await s.submit(type="echo", media=inline(m4a.read_bytes()), wait=20)
+        r = await s.submit(type="echo", arguments=arguments(inline(m4a.read_bytes())), wait=20)
         assert r.status_code == 200, r.text
         b = r.json()
-        assert b["timings_ms"]["transcode"] > 0
+        assert b["timings_ms"]["transcode.media"] > 0
         expected = 16000 * 2 * 1 + 44                 # 1s @16k mono s16 + WAV 头
-        assert abs(b["result"]["bytes"] - expected) < 2000, f"engine got {b['result']['bytes']} bytes, expected ≈ {expected} (16k mono wav)"
-        derived = s.node.media.derived_path(b["media_id"], "16k.wav")
+        assert abs(output(b)["bytes"] - expected) < 2000, f"engine got {output(b)['bytes']} bytes, expected ≈ {expected} (16k mono wav)"
+        derived = s.node.media.derived_path(media_id(b), "16k.wav")
         with wave.open(str(derived)) as w:
             assert w.getframerate() == 16000 and w.getnchannels() == 1 and w.getsampwidth() == 2
-        # 第二次（不同 params 避开结果缓存）复用派生文件：transcode 0 ms
-        r2 = await s.submit(type="echo", media={"ref": b["media_id"]}, params={"tag": "again"}, wait=20)
-        assert r2.json()["timings_ms"]["transcode"] == 0
+        # 第二次（不同 options 避开结果缓存）复用派生文件：transcode 0 ms
+        r2 = await s.submit(type="echo", arguments=arguments({"ref": media_id(b)}, {"tag": "again"}), wait=20)
+        assert r2.json()["timings_ms"]["transcode.media"] == 0
         # 认出是音频容器但解不开（m4a 魔数 + 垃圾）→ 400，说清是媒体的问题
-        r3 = await s.submit(type="echo", media=inline(b"\x00\x00\x00\x18ftypM4A " + blob(500)), wait=20)
+        r3 = await s.submit(type="echo", arguments=arguments(inline(b"\x00\x00\x00\x18ftypM4A " + blob(500))), wait=20)
         assert r3.status_code == 400 and "undecodable" in r3.json()["message"]
         # 认不出的字节原样交给引擎，A 不拦
-        r4 = await s.submit(type="echo", media=inline(blob(100)), wait=20)
-        assert r4.status_code == 200 and "transcode" not in r4.json()["timings_ms"]
+        r4 = await s.submit(type="echo", arguments=arguments(inline(blob(100))), wait=20)
+        assert r4.status_code == 200 and "transcode.media" not in r4.json()["timings_ms"]
     finally:
         await s.client.aclose(); await s.link.close(); await s.node.close()
 
@@ -66,10 +66,10 @@ async def test_real_wav_passes_through_untouched(tmp_path):
     with wave.open(str(wav), "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(frames)
     s = await build_stack(tmp_path)
-    s.node.registry.types["echo"]["input"]["media"]["preprocessor"] = "audio.to_wav_16k_mono"
+    s.node.registry.types["echo"]["input"]["fields"][0]["preprocessor"] = "audio.to_wav_16k_mono"
     try:
-        r = await s.submit(type="echo", media=inline(wav.read_bytes()), wait=20)
-        assert r.status_code == 200 and "transcode" not in r.json()["timings_ms"]
-        assert r.json()["result"]["bytes"] == wav.stat().st_size      # 8 kHz WAV 原样交给引擎，重采样是引擎的事
+        r = await s.submit(type="echo", arguments=arguments(inline(wav.read_bytes())), wait=20)
+        assert r.status_code == 200 and "transcode.media" not in r.json()["timings_ms"]
+        assert output(r.json())["bytes"] == wav.stat().st_size      # 8 kHz WAV 原样交给引擎，重采样是引擎的事
     finally:
         await s.client.aclose(); await s.link.close(); await s.node.close()

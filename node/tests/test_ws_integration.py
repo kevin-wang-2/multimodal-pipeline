@@ -107,15 +107,15 @@ async def test_echo_over_ws_unplug_and_restart(tmp_path):
 
         async with httpx.AsyncClient(base_url=base, timeout=30, trust_env=False) as c:
             # ---- echo 往返 ----
-            r = await c.post("/jobs", json={"type": "echo", "media": inline(blob(100)), "params": {"tag": "ws"}, "wait": 10})
+            r = await c.post("/jobs", json={"type": "echo", "arguments": {"media": inline(blob(100)), "options": {"tag": "ws"}}, "wait": 10})
             assert r.status_code == 200, r.text
             assert_valid(V_ANY, r.json())
-            assert r.json()["status"] == "done" and r.json()["result"]["params"]["tag"] == "ws"
+            assert r.json()["status"] == "done" and r.json()["outputs"]["result"]["value"]["options"]["tag"] == "ws"
             caps = (await c.get("/capabilities")).json()
             assert caps["capabilities"][0]["capability"]["id"] == "echo" and caps["capabilities"][0]["nodes"] == ["t-node"]
 
             # ---- 拔线：在途 GET(wait=5) 必须在 wait+grace 内得到 503 node_offline ----
-            r = await c.post("/jobs", json={"type": "echo", "media": inline(blob(100)), "params": {"sleep_ms": 4000, "tag": "slow"}})
+            r = await c.post("/jobs", json={"type": "echo", "arguments": {"media": inline(blob(100)), "options": {"sleep_ms": 4000, "tag": "slow"}}})
             assert r.status_code == 202
             jid = r.json()["job_id"]
             t0 = time.monotonic()
@@ -144,7 +144,7 @@ async def test_echo_over_ws_unplug_and_restart(tmp_path):
         try:
             await b2.wait_nodes(1, timeout=15)
             async with httpx.AsyncClient(base_url=base, timeout=30, trust_env=False) as c:
-                r = await c.post("/jobs", json={"type": "echo", "media": inline(blob(100)), "params": {"tag": "after-restart"}, "wait": 10})
+                r = await c.post("/jobs", json={"type": "echo", "arguments": {"media": inline(blob(100)), "options": {"tag": "after-restart"}}, "wait": 10})
                 assert r.status_code == 200 and r.json()["status"] == "done"
                 # 重启前的任务 B 一无所知（无状态），但 A 还记得：GET 仍然路由回去
                 r = await c.get(f"/jobs/{jid}")
@@ -172,10 +172,10 @@ async def test_openclaw_host_discovers_image_triage_and_injects_context(tmp_path
     async def fake_run(_spec, job, _timeout, _vram):
         surfaces = [{"id": "image_0", "kind": "image", "index": 0, "width_px": 64,
                      "height_px": 48, "rotation_deg": 0}]
-        digest, _ = build_digest(job["media_id"], "image/png", surfaces, ["A person holds a contract."],
+        digest, _ = build_digest(job["arguments"]["media"]["media_id"], "image/png", surfaces, ["A person holds a contract."],
                                  [RawRegion("image_0", "contract", [4, 5, 40, 30], "phrase_grounding")],
                                  0, .8, {"caption": 1})
-        return EngineResult(digest, {"caption": 1})
+        return EngineResult({"digest": {"kind": "json", "value": digest}}, {"caption": 1})
 
     node.pool.run = fake_run
     await node.start()
@@ -215,18 +215,18 @@ async def test_client_discovers_describes_and_runs_image_capability(tmp_path):
             surfaces = [{"id": "image_0", "kind": "image", "index": 0, "width_px": 64,
                          "height_px": 48, "rotation_deg": 0}]
             digest, _ = build_digest(
-                job["media_id"], "image/png", surfaces, ["A person holds a contract."],
+                job["arguments"]["media"]["media_id"], "image/png", surfaces, ["A person holds a contract."],
                 [RawRegion("image_0", "contract", [4, 5, 40, 30], "phrase_grounding")],
                 0, .8, {"caption": 1},
             )
-            return EngineResult(digest, {"caption": 1})
-        return EngineResult({
+            return EngineResult({"digest": {"kind": "json", "value": digest}}, {"caption": 1})
+        return EngineResult({"document": {"kind": "json", "value": {
             "page_count": 1,
             "pages": [{"page": 1, "tier": "gpu-fast", "width": 64, "height": 48,
                        "text": "contract", "lines": [], "quality": {"lines": 1, "chars": 8},
                        "flags": []}],
             "suggest_upgrade_pages": [],
-        }, {"ocr": 1})
+        }}}, {"ocr": 1})
 
     node.pool.run = fake_run
     await node.start()
@@ -290,8 +290,8 @@ async def test_graceful_node_shutdown_returns_node_offline_for_inflight_request(
         await b.wait_nodes(1)
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=30, trust_env=False) as c:
             pending = asyncio.create_task(c.post("/jobs", json={
-                "type": "echo", "media": inline(blob(100)),
-                "params": {"sleep_ms": 4000, "tag": "shutdown"}, "wait": 60,
+                "type": "echo", "arguments": {"media": inline(blob(100)),
+                "options": {"sleep_ms": 4000, "tag": "shutdown"}}, "wait": 60,
             }))
             for _ in range(100):
                 if node.sched.running == 1:
@@ -320,7 +320,7 @@ async def test_broker_rejects_non_register_first_frame(tmp_path):
     await b.start()
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws", proxy=None) as ws:
-            await ws.send(json.dumps({"type": "heartbeat", "protocol_version": "2.0", "ts": "2026-09-21T00:00:00Z",
+            await ws.send(json.dumps({"type": "heartbeat", "protocol_version": "3.0", "ts": "2026-09-21T00:00:00Z",
                                       "payload": {"node_id": "x", "queue_len": 0, "running": 0, "engines_loaded": []}}))
             with pytest.raises(websockets.exceptions.ConnectionClosed) as e:
                 await ws.recv()
@@ -329,10 +329,12 @@ async def test_broker_rejects_non_register_first_frame(tmp_path):
             await ws.send(json.dumps({"type": "register", "protocol_version": "3.0", "ts": "2026-09-21T00:00:00Z",
                                       "payload": {"node_id": "x", "node_key": KEY, "capabilities": [{"id": "echo", "visibility": "public", "purpose": "diagnostic",
                                                   "tiers": [{"tier": "cpu", "engine": "e", "engine_version": "1", "cost": "low"}],
-                                                  "input": {"media": {"presence": "required", "accepts": ["*/*"]}},
-                                                  "output": {"schema": {"type": "object"}, "agent_context": "none"}}], "engine_versions": {}}}))
+                                                  "input": {"fields": [{"name": "media", "kind": "media", "required": True,
+                                                    "accepts": ["*/*"]}]},
+                                                  "output": {"fields": [{"name": "result", "kind": "json", "required": True,
+                                                    "schema": {"type": "object"}}], "agent_context": "none"}}], "engine_versions": {}}}))
             with pytest.raises(websockets.exceptions.ConnectionClosed) as e:
                 await ws.recv()
-            assert e.value.rcvd.code == 4002
+            assert e.value.rcvd.code == 4003
     finally:
         b.stop()

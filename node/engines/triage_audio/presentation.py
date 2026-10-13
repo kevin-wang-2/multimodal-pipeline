@@ -17,7 +17,7 @@ def render_agent_context(digest: dict) -> dict:
     ]
     if degraded:
         lines.append(f"⚠ 本次预检降级（{source.get('degraded_reason', 'unknown')}）：结果不完整，按需重新分析。")
-    threshold = source.get("params", {}).get("label_confidence_threshold", 0.3)
+    threshold = source.get("arguments", {}).get("options", {}).get("label_confidence_threshold", 0.3)
     lines.append("时间轴（秒，[start,end)）：")
 
     def render(segment: dict) -> str:

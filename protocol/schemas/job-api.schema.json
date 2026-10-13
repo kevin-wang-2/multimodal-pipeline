@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:mmp:protocol:2:job-api",
+  "$id": "urn:mmp:protocol:3:job-api",
   "title": "JobApi",
   "description": "C→B 任务 API（架构.md §5）。只有一种调用形态：提交即返回 job_id，可选 wait 秒长轮询。本文件没有根 schema，只有 $defs：每个端点的请求体 / 响应体各一个定义。人读版见 docs/协议.md。",
   "$defs": {
@@ -63,15 +63,22 @@
       "type": "object",
       "properties": {
         "type": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId"
         },
-        "media": {
-          "$ref": "urn:mmp:protocol:2:media-handle"
-        },
-        "params": {
-          "description": "任务类型专有参数，按该类型 capability.input.params_schema 校验。进缓存键（规范化后 hash）。",
+        "arguments": {
+          "description": "按 capability.input.fields 的 name 提交命名输入；A 按字段 kind/schema/MIME/cardinality 校验。",
           "type": "object",
-          "default": {}
+          "minProperties": 1
+        },
+        "delivery": {
+          "description": "media output 字段名到受控 PUT endpoint（或与多值输出等长的 endpoint 数组）的映射；没有 endpoint 时只能在内联上限内返回。",
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "$ref": "urn:mmp:protocol:3:media-handle#/$defs/Endpoint" },
+              { "type": "array", "items": { "$ref": "urn:mmp:protocol:3:media-handle#/$defs/Endpoint" }, "minItems": 1 }
+            ]
+          }
         },
         "priority": {
           "$ref": "#/$defs/Priority",
@@ -79,7 +86,7 @@
         },
         "tier": {
           "description": "档位偏好。省略 = 该类型的默认档；A 若无法满足可回落并在 source.degraded 标注。",
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/Tier"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/Tier"
         },
         "wait": {
           "$ref": "#/$defs/Wait"
@@ -87,7 +94,7 @@
       },
       "required": [
         "type",
-        "media"
+        "arguments"
       ],
       "additionalProperties": false
     },
@@ -96,7 +103,7 @@
       "type": "object",
       "properties": {
         "tier": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/Tier"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/Tier"
         },
         "engine": {
           "type": "string",
@@ -122,8 +129,8 @@
             "partial_failure"
           ]
         },
-        "params": {
-          "description": "实际生效的参数（规范化后），含默认值；如 label_confidence_threshold。",
+        "arguments": {
+          "description": "实际生效的非媒体命名输入；媒体句柄、URL 与凭据不进入来源信息。",
           "type": "object"
         }
       },
@@ -148,28 +155,56 @@
       },
       "additionalProperties": false
     },
-    "ResultRef": {
-      "description": "大输出已 PUT 到请求方给的 media.put 端点时，响应里只给这份引用。",
+    "MediaIds": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "urn:mmp:protocol:3:media-handle#/$defs/MediaId" },
+          { "type": "array", "items": { "$ref": "urn:mmp:protocol:3:media-handle#/$defs/MediaId" }, "minItems": 1 }
+        ]
+      }
+    },
+    "TextOutput": {
+      "type": "object",
+      "properties": { "kind": { "const": "text" }, "text": { "type": "string" } },
+      "required": ["kind", "text"],
+      "additionalProperties": false
+    },
+    "JsonOutput": {
+      "type": "object",
+      "properties": { "kind": { "const": "json" }, "value": {} },
+      "required": ["kind", "value"],
+      "additionalProperties": false
+    },
+    "MediaOutput": {
       "type": "object",
       "properties": {
-        "content_type": {
-          "type": "string"
-        },
-        "bytes": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        }
+        "kind": { "const": "media" },
+        "content_type": { "type": "string", "pattern": "^[a-z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+$" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "inline": { "type": "string", "pattern": "^[A-Za-z0-9+/]*={0,2}$" },
+        "delivered": { "const": true }
       },
-      "required": [
-        "content_type",
-        "bytes",
-        "sha256"
+      "required": ["kind", "content_type", "bytes", "sha256"],
+      "oneOf": [
+        { "required": ["inline"], "not": { "required": ["delivered"] } },
+        { "required": ["delivered"], "not": { "required": ["inline"] } }
       ],
       "additionalProperties": false
+    },
+    "OutputAtom": {
+      "oneOf": [
+        { "$ref": "#/$defs/TextOutput" },
+        { "$ref": "#/$defs/JsonOutput" },
+        { "$ref": "#/$defs/MediaOutput" }
+      ]
+    },
+    "OutputValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/OutputAtom" },
+        { "type": "array", "items": { "$ref": "#/$defs/MediaOutput" }, "minItems": 1 }
+      ]
     },
     "AgentContext": {
       "description": "由任务实现确定性生成、可直接交给基础模型的上下文；客户端只透传，不解析其中的模态语义。",
@@ -191,7 +226,7 @@
           "enum": ["compute", "cache"]
         },
         "tier": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/Tier"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/Tier"
         },
         "engine": {
           "type": "string",
@@ -223,20 +258,20 @@
       "additionalProperties": false
     },
     "JobDone": {
-      "description": "200：任务完成。result 与 result_ref 二选一。",
+      "description": "200：任务完成。outputs 的字段名与 capability.output.fields 一致。",
       "type": "object",
       "properties": {
         "job_id": {
           "$ref": "#/$defs/JobId"
         },
         "type": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId"
         },
         "status": {
           "const": "done"
         },
-        "media_id": {
-          "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId"
+        "media_ids": {
+          "$ref": "#/$defs/MediaIds"
         },
         "cached": {
           "type": "boolean"
@@ -244,11 +279,10 @@
         "source": {
           "$ref": "#/$defs/Source"
         },
-        "result": {
-          "description": "该任务类型 output.schema 的实例；预检类型即 digest。"
-        },
-        "result_ref": {
-          "$ref": "#/$defs/ResultRef"
+        "outputs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/OutputValue" }
         },
         "agent_context": {
           "$ref": "#/$defs/AgentContext"
@@ -268,21 +302,10 @@
         "job_id",
         "type",
         "status",
-        "media_id",
+        "media_ids",
         "cached",
-        "source"
-      ],
-      "oneOf": [
-        {
-          "required": [
-            "result"
-          ]
-        },
-        {
-          "required": [
-            "result_ref"
-          ]
-        }
+        "source",
+        "outputs"
       ],
       "additionalProperties": false
     },
@@ -294,11 +317,10 @@
           "$ref": "#/$defs/JobId"
         },
         "type": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId"
         },
-        "media_id": {
-          "description": "v1.1 起 A 总是填：任务一入队调用方就知道内容 hash，后续提交可用 media.ref 免重复上传 / 下载。",
-          "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId"
+        "media_ids": {
+          "$ref": "#/$defs/MediaIds"
         },
         "status": {
           "type": "string",
@@ -323,6 +345,7 @@
       "required": [
         "job_id",
         "type",
+        "media_ids",
         "status"
       ],
       "additionalProperties": false
@@ -335,11 +358,10 @@
           "$ref": "#/$defs/JobId"
         },
         "type": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId"
         },
-        "media_id": {
-          "description": "v1.1 起 A 总是填：任务一入队调用方就知道内容 hash，后续提交可用 media.ref 免重复上传 / 下载。",
-          "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId"
+        "media_ids": {
+          "$ref": "#/$defs/MediaIds"
         },
         "status": {
           "const": "failed"
@@ -358,6 +380,7 @@
       "required": [
         "job_id",
         "type",
+        "media_ids",
         "status",
         "error"
       ],
@@ -371,11 +394,10 @@
           "$ref": "#/$defs/JobId"
         },
         "type": {
-          "$ref": "urn:mmp:protocol:2:capability#/$defs/TaskTypeId"
+          "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId"
         },
-        "media_id": {
-          "description": "v1.1 起 A 总是填：任务一入队调用方就知道内容 hash，后续提交可用 media.ref 免重复上传 / 下载。",
-          "$ref": "urn:mmp:protocol:2:media-handle#/$defs/MediaId"
+        "media_ids": {
+          "$ref": "#/$defs/MediaIds"
         },
         "status": {
           "const": "cancelled"
@@ -384,6 +406,7 @@
       "required": [
         "job_id",
         "type",
+        "media_ids",
         "status"
       ],
       "additionalProperties": false
@@ -449,7 +472,7 @@
             "type": "object",
             "properties": {
               "capability": {
-                "$ref": "urn:mmp:protocol:2:capability"
+                "$ref": "urn:mmp:protocol:3:capability"
               },
               "nodes": {
                 "description": "提供该任务类型的节点。",
@@ -507,7 +530,7 @@
                 "format": "date-time"
               },
               "heartbeat": {
-                "$ref": "urn:mmp:protocol:2:ab-message#/$defs/HeartbeatPayload"
+                "$ref": "urn:mmp:protocol:3:ab-message#/$defs/HeartbeatPayload"
               }
             },
             "required": [

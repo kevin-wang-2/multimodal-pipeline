@@ -9,6 +9,7 @@ from typing import Callable
 
 from .config import Config, EngineSection
 from .errors import ApiError
+from . import schemas
 
 TIER_ORDER = ["remote", "gpu", "gpu-fast", "cpu"]  # 贵 → 便宜；回落沿着这个方向
 
@@ -56,6 +57,19 @@ class Registry:
         mod = importlib.import_module(sec.module)
         caps = [dict(c) for c in getattr(mod, "CAPABILITIES")]
         for cap in caps:
+            errors = schemas.errors(schemas.validator_for_ref("urn:mmp:protocol:3:capability"), cap)
+            if errors:
+                raise ValueError(f"invalid capability {cap.get('id', '<unknown>')}: {'; '.join(errors[:3])}")
+            for side in ("input", "output"):
+                names = [field["name"] for field in cap[side]["fields"]]
+                if len(names) != len(set(names)):
+                    raise ValueError(f"capability {cap['id']} has duplicate {side} field names")
+                for field in cap[side]["fields"]:
+                    cardinality = field.get("cardinality")
+                    if cardinality and cardinality["min"] > cardinality["max"]:
+                        raise ValueError(f"capability {cap['id']}.{field['name']} has invalid cardinality")
+                    if cardinality and field["required"] and cardinality["min"] == 0:
+                        raise ValueError(f"capability {cap['id']}.{field['name']} is required but allows zero values")
             for t in cap["tiers"]:
                 if isinstance(sec.max_concurrency, int):
                     t["max_concurrency"] = sec.max_concurrency
@@ -157,7 +171,8 @@ class Registry:
         for cap in self.capabilities(include_internal=include_internal):
             if cap.get("purpose") in {"triage", "diagnostic"}:
                 continue
-            accepts = cap.get("input", {}).get("media", {}).get("accepts", [])
+            accepts = [pattern for field in cap["input"]["fields"] if field["kind"] == "media"
+                       for pattern in field["accepts"]]
             if not any(self._matches_media_type(pattern, media_type) for pattern in accepts):
                 continue
             consumes = cap.get("consumes") or {}
@@ -178,9 +193,6 @@ class Registry:
         changed = result.get("capabilities_available") != available
         result["capabilities_available"] = available
         return changed
-
-    def result_schema(self, task_type: str):
-        return self.capability(task_type)["output"]["schema"]
 
     def present_agent_context(self, task_type: str, result: object) -> dict | None:
         cap = self.capability(task_type)

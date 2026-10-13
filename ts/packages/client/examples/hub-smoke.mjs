@@ -14,17 +14,24 @@ try {
   console.log("capabilities:", caps.capabilities.map((x) => x.capability.id));
 
   let t0 = Date.now();
-  const e = await c.run({ type: "echo", media: media.inline(new TextEncoder().encode("hello mmp")), params: { tag: "client-smoke" } });
+  const e = await c.run({ type: "echo", arguments: {
+    media: media.inline(new TextEncoder().encode("hello mmp")), options: { tag: "client-smoke" },
+  } });
   console.log(`echo: ${e.status} cached=${e.cached} ${t(Date.now() - t0)}`);
 
   t0 = Date.now();
   const capability = await c.resolveCapability({ purpose: "triage", contentType: "audio/wav" });
-  const d1 = await c.run({ type: capability.id, media: media.inline(readFileSync(wav), "audio/wav") }, { pollWaitSec: 60 });
+  const d1 = await c.run({ type: capability.id, arguments: {
+    media: media.inline(readFileSync(wav), "audio/wav"),
+  } }, { pollWaitSec: 60 });
   console.log(`${capability.id} (inline): cached=${d1.cached} fetch=${d1.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
 
   t0 = Date.now();
-  const d2 = await c.run({ type: capability.id, media: media.ref(d1.media_id), params: { label_confidence_threshold: 0.35 } }, { pollWaitSec: 60 });
-  console.log(`${capability.id} (ref, new params): cached=${d2.cached} fetch=${d2.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
+  const mediaId = d1.media_ids.media;
+  const d2 = await c.run({ type: capability.id, arguments: {
+    media: media.ref(mediaId), options: { label_confidence_threshold: 0.35 },
+  } }, { pollWaitSec: 60 });
+  console.log(`${capability.id} (ref, new options): cached=${d2.cached} fetch=${d2.timings_ms?.fetch}ms ${t(Date.now() - t0)}`);
 
   console.log("\n" + d1.agent_context?.text);
 } catch (err) {

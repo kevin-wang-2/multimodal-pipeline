@@ -83,8 +83,12 @@ CAPABILITIES = [
             {"tier": "gpu", "engine": ENGINE_VL, "engine_version": VERSION_VL, "cost": "high",
              "latency_hint": "~9s/page", "vram_mb": 12288, "max_concurrency": 1},
         ],
-        "input": {"media": {"presence": "required", "accepts": ["image/*", "application/pdf"]},
-                  "params_schema": PARAMS_SCHEMA},
-        "output": {"schema": OUTPUT_SCHEMA, "agent_context": "none"},
+        "input": {"fields": [
+            {"name": "media", "kind": "media", "required": True,
+             "accepts": ["image/*", "application/pdf"], "cardinality": {"min": 1, "max": 1}},
+            {"name": "options", "kind": "json", "required": False, "schema": PARAMS_SCHEMA},
+        ]},
+        "output": {"fields": [{"name": "document", "kind": "json", "required": True,
+                                  "schema": OUTPUT_SCHEMA}], "agent_context": "none"},
     }
 ]

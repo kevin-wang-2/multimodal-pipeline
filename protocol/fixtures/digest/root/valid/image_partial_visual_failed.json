@@ -41,7 +41,7 @@
     "generated_at": "2026-09-29T00:00:00+08:00",
     "degraded": true,
     "degraded_reason": "partial_failure",
-    "params": {
+    "arguments": {
       "fallback_reason": "empty_description"
     }
   }

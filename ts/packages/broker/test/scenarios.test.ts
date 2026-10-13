@@ -48,7 +48,7 @@ test("request timeout aborts transport pending without dropping the node", async
     }, { once: true });
   });
   broker.onRegister({
-    type: "register", protocol_version: "2.0", ts: "2026-09-21T00:00:00Z",
+    type: "register", protocol_version: "3.0", ts: "2026-09-21T00:00:00Z",
     payload: { node_id: "node-a", node_key: "scenario-node-key-0123456789", capabilities: [{
       id: "echo", visibility: "public", purpose: "diagnostic", tiers: [{ tier: "cpu", engine: "e-echo", engine_version: "1", cost: "low" }],
       input: { media: { presence: "required", accepts: ["*/*"] } },
@@ -70,7 +70,7 @@ test("remote Broker excludes internal capabilities and their engine versions", a
     input: { media: { presence: "required", accepts: ["*/*"] } },
     output: { schema: { type: "object" }, agent_context: "none" } };
   let calls = 0;
-  broker.onRegister({ type: "register", protocol_version: "2.0", payload: {
+  broker.onRegister({ type: "register", protocol_version: "3.0", payload: {
     node_id: "node-a", node_key: "scenario-node-key-0123456789",
     capabilities: [capability, { ...capability, id: "echo.internal", visibility: "internal",
       tiers: [{ tier: "cpu", engine: "private-engine", engine_version: "secret", cost: "low" }] }],

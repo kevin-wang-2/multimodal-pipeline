@@ -19,13 +19,13 @@
 | `coverage_anomaly` | 检测框覆盖的**文字墨迹**占比过低——有字没认出来（T5 §2.4 旋转 3° 静默丢内容的探测器）。框线 / 分隔线先被去掉，不算文字墨迹 | `coverage_min` 0.45 |
 | `empty` | 有墨迹却一行没认出 | — |
 
-上层决定是否再提一个 `tier: "gpu"` + `params.pages: [...]` 的任务（T5 §5.4：MVP 只做按需升级；铁律 2：预检只路由）。这样 VRAM 才能按 tier 记账，快档任务也不会突然占 12 GiB。
+上层决定是否再提一个 `tier: "gpu"` + `arguments.options.pages: [...]` 的任务（T5 §5.4：MVP 只做按需升级；铁律 2：预检只路由）。这样 VRAM 才能按 tier 记账，快档任务也不会突然占 12 GiB。
 
 `coverage_min` 校准（lab，2026-09-21）：正立发票 0.56–0.64；旋转 3° 且 PP-OCRv6 一个字没丢时 0.47（框线不再是直线，被算成文字墨迹）；真丢 60% 内容（T5 的 Tesseract 案例）应远低于 0.45。探测器对几何扰动敏感、宁多升级。
 
 ## 输入
 
-PDF（pypdfium2 按 `dpi` 栅格化，默认 200）、PNG / JPEG / TIFF（多帧）/ WEBP，按魔数判类型。`params.pages` 选页（1-based）。结果超过 A 的内联上限时走 `media.put`（S5 冒烟里把上限压到 4 KB 逼它走 PUT）。
+PDF（pypdfium2 按 `dpi` 栅格化，默认 200）、PNG / JPEG / TIFF（多帧）/ WEBP，按魔数判类型。`arguments.options.pages` 选页（1-based）。结构化 JSON 固定在 `outputs.document.value` 内联；只有 capability 声明为 media 的输出才使用 `delivery` PUT。
 
 ## 环境（GPU 机，Windows + conda）
 

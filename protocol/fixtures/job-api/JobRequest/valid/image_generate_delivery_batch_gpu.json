@@ -1,0 +1,14 @@
+{
+  "type": "image.generate",
+  "arguments": {
+    "prompt": "一张舞台概念图",
+    "options": { "width": 1024, "height": 1024, "seed": 42 }
+  },
+  "delivery": {
+    "image": {
+      "url": "https://storage.example/bucket/image.png?X-Sig=def"
+    }
+  },
+  "priority": "batch",
+  "tier": "gpu"
+}

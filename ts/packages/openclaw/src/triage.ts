@@ -15,12 +15,16 @@ export async function triageBytes(client: MmpClient, bytes: Uint8Array, contentT
   }
   if (!contentType) throw new MmpError("unsupported_type", "attachment Content-Type is unknown");
   const capability = await client.resolveCapability({ purpose: "triage", contentType });
+  const mediaField = capability.input.fields.find((field) => field.kind === "media");
+  if (!mediaField) throw new MmpError("unexpected", `${capability.id} has no media input`);
   const done = await client.run(
-    { type: capability.id, media: media.inline(bytes, contentType), priority: "interactive" },
+    { type: capability.id, arguments: { [mediaField.name]: media.inline(bytes, contentType) }, priority: "interactive" },
     { pollWaitSec: Math.min(120, cfg.waitSec ?? 50), timeoutMs: ((cfg.waitSec ?? 50) + 10) * 1000 },
   );
   if (!done.agent_context) throw new MmpError("unexpected", `${capability.id} completed without agent_context`, { jobId: done.job_id, body: done });
-  return { text: done.agent_context.text, mediaId: done.media_id, cached: done.cached };
+  const mediaId = done.media_ids[mediaField.name];
+  if (typeof mediaId !== "string") throw new MmpError("unexpected", `${capability.id} returned no scalar media id`, { jobId: done.job_id, body: done });
+  return { text: done.agent_context.text, mediaId, cached: done.cached };
 }
 
 export function makeClient(cfg: MmpHostConfig, fetchImpl?: typeof fetch): MmpClient {

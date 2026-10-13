@@ -11,6 +11,5 @@ MODEL_REVISION = "4ecd0d82d30daec24691db30495d752f2d7d7f64"
 CAPABILITIES = deepcopy(PUBLIC_CAPABILITIES)
 CAPABILITIES[0].update(
     id="image.generate.internal", visibility="internal",
-    description="内部 FP8 文生图，仅 provider 绑定 B 可用；media 为 UTF-8 text/plain 提示词。"
-                "单张 PNG base64，最多 1048576 像素，大结果需提供 media.put（接收 JSON）。")
+    description="内部 FP8 文生图，仅 provider 绑定 B 可用；接受命名 prompt 与 options，输出单张 PNG。")
 CAPABILITIES[0]["tiers"][0].update(engine=ENGINE, engine_version=ENGINE_VERSION)

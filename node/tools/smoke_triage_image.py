@@ -66,17 +66,18 @@ async def main() -> None:
         await wait_loaded(node, "triage_image")
         # 模型加载不等于 CUDA 首次推理；用不同参数预热，避免污染正式缓存键。
         data = images[0].read_bytes()
-        await broker.submit({"type": "triage.image", "media": {"inline": base64.b64encode(data).decode()},
-                             "params": {"region_dedupe_iou": .79}, "wait": 120})
+        await broker.submit({"type": "triage.image", "arguments": {
+            "media": {"inline": base64.b64encode(data).decode()},
+            "options": {"region_dedupe_iou": .79}}, "wait": 120})
         base_peak = 0.0
         large_seen = False
         for path in images:
             data = path.read_bytes(); t0 = time.monotonic()
-            status, body = await broker.submit({"type": "triage.image",
-                                                "media": {"inline": base64.b64encode(data).decode()}, "wait": 120})
+            status, body = await broker.submit({"type": "triage.image", "arguments": {
+                "media": {"inline": base64.b64encode(data).decode()}}, "wait": 120})
             wall = time.monotonic() - t0
-            digest = body.get("result") or {}
-            errs = list(validator_for("urn:mmp:protocol:2:digest").iter_errors(digest))
+            digest = (body.get("outputs") or {}).get("digest", {}).get("value", {})
+            errs = list(validator_for("urn:mmp:protocol:3:digest").iter_errors(digest))
             print(json.dumps({"image": path.name, "status": status, "wall_s": round(wall, 3),
                               "source": digest.get("source"), "regions": len(digest.get("regions", [])),
                               "metrics": node.jobs.get(body.get("job_id")).engine_metrics if body.get("job_id") in node.jobs else {}},
@@ -96,7 +97,7 @@ async def main() -> None:
                 metrics = node.jobs[body["job_id"]].engine_metrics
                 if metrics.get("large_vram_peak_mb", 0) > 2560:
                     failures.append(f"{path.name}: large peak {metrics['large_vram_peak_mb']} MiB > 2560")
-                if "fallback_reason" not in source.get("params", {}):
+                if "fallback_reason" not in source.get("arguments", {}):
                     failures.append(f"{path.name}: fallback source missing reason")
             base_ms = sum(v for k, v in digest.get("timings_ms", {}).items() if k.startswith("base_"))
             if base_ms and base_ms > 2000:
@@ -108,8 +109,8 @@ async def main() -> None:
         Handler.data = images[0].read_bytes(); server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         try:
-            status, cached = await broker.submit({"type": "triage.image", "media": {"get": {
-                "url": f"http://127.0.0.1:{server.server_address[1]}/image"}}, "wait": 30})
+            status, cached = await broker.submit({"type": "triage.image", "arguments": {"media": {"get": {
+                "url": f"http://127.0.0.1:{server.server_address[1]}/image"}}}, "wait": 30})
             if status != 200 or not cached.get("cached"):
                 failures.append("inline/get did not share result cache")
             elif cached.get("agent_context") is None:

@@ -125,6 +125,11 @@ class MediaStore:
             self.touch(media_id)
         return media_id, path
 
+    def store(self, data: bytes, content_type: str | None) -> str:
+        """Store an engine-produced media atom so a later input can reuse it by ref."""
+        media_id, _ = self._store(data, content_type)
+        return media_id
+
     def _evict(self) -> None:
         """超出上限就从最久未访问的开始删，跳过 pin 住的。"""
         total = self.total_bytes()

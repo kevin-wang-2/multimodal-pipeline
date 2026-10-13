@@ -10,7 +10,6 @@ import asyncio
 import base64
 import binascii
 import heapq
-import hashlib
 import json
 import logging
 import time
@@ -422,8 +421,9 @@ class Scheduler:
             blob = base64.b64decode(output["data_base64"], validate=True)
         except (binascii.Error, ValueError) as e:
             raise ApiError("engine_failed", f"engine output {name!r} is not valid base64") from e
+        media_id = self.media.store(blob, output["content_type"])
         descriptor = {"kind": "media", "content_type": output["content_type"], "bytes": len(blob),
-                      "sha256": hashlib.sha256(blob).hexdigest()}
+                      "sha256": media_id.removeprefix("sha256:"), "media_id": media_id}
         if endpoint is not None:
             await self.media.put(endpoint, blob, output["content_type"])
             descriptor["delivered"] = True

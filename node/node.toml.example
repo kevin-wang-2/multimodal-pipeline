@@ -89,3 +89,12 @@ timeout_sec = 30                    # 单任务时限；超时且无更便宜档
 # timeout_sec = 900
 # keep_warm = false
 # env = { MMP_COMFY_ROOT = "C:/ai/krea2/ComfyUI", MMP_KREA_RESERVE_VRAM_GB = "4", MMP_KREA_DIFFUSION_MODEL = "moodyKrea2Mix_v3-Global-FP8.safetensors", MMP_KREA_TEXT_ENCODER = "qwen3VL4BAbliteratedComfyui_FP8.safetensors" }
+
+# Qwen Image 2.1 Turbo Int8 仅限内部非商用；与 Krea 使用独立环境、ComfyUI 和权重目录。
+# 同一进程提供 image.generate.qwen 与 image.edit.qwen，任务结束后退出并释放显存。
+# [engines.qwen_image_internal]
+# module = "engines.qwen_image_internal"
+# python = "C:/mmp/envs/qwen-image-2-1-turbo/Scripts/python.exe"
+# timeout_sec = 900
+# keep_warm = false
+# env = { MMP_QWEN_COMFY_ROOT = "C:/ai/qwen-image-2-1-turbo/ComfyUI", MMP_QWEN_RESERVE_VRAM_GB = "1" }

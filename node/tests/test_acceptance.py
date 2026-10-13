@@ -168,6 +168,9 @@ async def test_multiple_named_media_inputs_are_fetched_keyed_and_unpinned(tmp_pa
         assert done["status"] == "done"
         assert isinstance(done["media_ids"]["references"], list) and len(done["media_ids"]["references"]) == 2
         assert [item["delivered"] for item in done["outputs"]["gallery"]] == [True, True]
+        assert all(stack.node.media.has(item["media_id"]) for item in done["outputs"]["gallery"])
+        reused = await stack.node.media.fetch({"ref": done["outputs"]["gallery"][0]["media_id"]})
+        assert reused.fetched is False and reused.path.read_bytes() == b"a"
         assert done["outputs"]["caption"] == {"kind": "text", "text": "combined"}
         assert [item[0] for item in delivered] == ["https://upload.example/one", "https://upload.example/two"]
         assert done["outputs"]["summary"]["value"]["base"] == done["media_ids"]["base"]

@@ -149,7 +149,7 @@ jobs:
         run: '%PY_NODE% node\tools\smoke_image_generate.py || exit /b 1'
 
   deploy-node:
-    needs: [unit, smoke]
+    needs: [unit, smoke, deploy-broker]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: windows
     timeout-minutes: 15

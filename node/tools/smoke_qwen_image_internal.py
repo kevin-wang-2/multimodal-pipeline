@@ -44,6 +44,12 @@ async def finish(broker: Broker, request: dict) -> tuple[dict, float]:
 
 async def main() -> None:
     source = Path(os.environ["MMP_QWEN_SMOKE_INPUT"])
+    source_content_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }[source.suffix.lower()]
     output_dir = Path(os.environ["MMP_QWEN_SMOKE_OUTPUT"])
     output_dir.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -92,9 +98,9 @@ async def main() -> None:
             edited, wall = await finish(broker, {
                 "type": "image.edit.qwen",
                 "arguments": {"image": {"inline": base64.b64encode(source.read_bytes()).decode(),
-                                         "content_type": "image/png"},
-                              "prompt": "Replace only the blue-green jacket with a vivid red jacket. Preserve the "
-                                        "person's face, identity, pose, hair, framing, lighting and background.",
+                                         "content_type": source_content_type},
+                              "prompt": "Replace only the mint-green car body paint with vivid red paint. Preserve "
+                                        "the car, wheels, windows, framing, lighting, street and background.",
                               "options": {"resolution": 1024, "seed": 561002}},
                 "delivery": delivery("02-edit-existing.png"),
             })
@@ -104,8 +110,8 @@ async def main() -> None:
             continued_request = {
                 "type": "image.edit.qwen",
                 "arguments": {"image": {"ref": previous, "content_type": "image/png"},
-                              "prompt": "Add a single thin gold necklace around the person's neck. Keep the red "
-                                        "jacket and preserve the face, identity, pose, hair, framing, lighting and background.",
+                              "prompt": "Add one thin gold racing stripe along the side of the red car body. Keep "
+                                        "the red paint and preserve the car, wheels, windows, framing, lighting, street and background.",
                               "options": {"resolution": 1024, "seed": 561003}},
                 "delivery": delivery("03-edit-previous-output.png"),
             }

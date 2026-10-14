@@ -1,0 +1,18 @@
+{
+  "type": "music.generate",
+  "arguments": {
+    "style": "Mandarin piano pop",
+    "lyrics": "[Verse]\n晨光落在窗边",
+    "score": "X:1\nK:C\nC D E F",
+    "options": {
+      "seed": 831001
+    }
+  },
+  "delivery": {
+    "audio": {
+      "url": "https://storage.example/song.flac"
+    }
+  },
+  "priority": "batch",
+  "tier": "gpu"
+}

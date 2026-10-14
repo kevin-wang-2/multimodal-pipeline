@@ -82,6 +82,15 @@ timeout_sec = 30                    # 单任务时限；超时且无更便宜档
 # keep_warm = false
 # env = { MMP_COMFY_ROOT = "C:/ai/krea2/ComfyUI", MMP_KREA_RESERVE_VRAM_GB = "4" }
 
+# YuE2 BF16: cuDNN + CUDA Graph; one song at a time, process exits after each job.
+# Run setup_env.py install --root <model-root> in this engine's own Python environment.
+# [engines.music_generate]
+# module = "engines.music_generate"
+# python = "C:/mmp/envs/yue2/Scripts/python.exe"
+# timeout_sec = 900
+# keep_warm = false
+# env = { MMP_YUE2_ROOT = "C:/mmp/models/yue2" }
+
 # 内部版仅绑定 B 可用；与普通版共用同一个 EnginePool，不同时驻留。
 # [engines.image_generate_internal]
 # module = "engines.image_generate_internal"

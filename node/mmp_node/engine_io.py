@@ -69,7 +69,8 @@ class EngineProcess:
         self.proc = await asyncio.create_subprocess_exec(
             *self.spec.cmd, cwd=str(self.spec.cwd),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            limit=64 * 1024 * 1024,
+            # Full-length 48 kHz stereo PCM-24 FLAC plus Base64 can exceed 64 MiB.
+            limit=192 * 1024 * 1024,
             # 子进程 stdio 一律 utf-8：Windows 默认 GBK 会把 JSON 里的中文编坏
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", **self.spec.env},
         )

@@ -89,6 +89,9 @@ jobs:
       MMP_QWEN_COMFY_ROOT: C:\ai\qwen-image-2-1-turbo\ComfyUI
       MMP_QWEN_SMOKE_INPUT: C:\mmp\testdata\images\car.jpg
       MMP_QWEN_SMOKE_OUTPUT: ci-out\qwen-image
+      MMP_YUE2_PYTHON: C:\mmp\envs\yue2\Scripts\python.exe
+      MMP_YUE2_ROOT: C:\mmp\models\yue2
+      MMP_YUE2_SMOKE_OUTPUT: ci-out\yue2
       MMP_FLORENCE_BASE: C:\mmp\cache\vision-spike\models\Florence-2-base-ft-native
       MMP_FLORENCE_LARGE: C:\mmp\cache\vision-spike\models\Florence-2-large-ft-native
       MMP_SMOKE_IMAGES: C:\mmp\testdata\images
@@ -154,6 +157,12 @@ jobs:
       - name: Qwen image generation, edit, continuous edit and cache smoke
         shell: cmd
         run: '%PY_NODE% node\tools\smoke_qwen_image_internal.py || exit /b 1'
+      - name: YuE2 BF16 cuDNN generation, score reuse, cache and cancel smoke
+        shell: cmd
+        run: |
+          @echo off
+          %MMP_YUE2_PYTHON% node\engines\music_generate\setup_env.py verify --root %MMP_YUE2_ROOT% || exit /b 1
+          %PY_NODE% node\tools\smoke_music_generate.py || exit /b 1
 
   deploy-node:
     needs: [unit, smoke, deploy-broker]

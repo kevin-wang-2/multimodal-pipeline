@@ -23,8 +23,8 @@ def request(job: dict) -> dict:
         result["abc" if name == "score" else name] = value
     options = arguments.get("options") or {}
     seed = options.get("seed", OPTIONS_SCHEMA["properties"]["seed"]["default"])
-    if type(seed) is not int or not 0 <= seed < 2**63:
-        raise ValueError("seed must be an integer in [0, 2**63)")
+    if type(seed) is not int or not 0 <= seed < 2**32:
+        raise ValueError("seed must be an integer in [0, 2**32)")
     return {**result, "seed": seed, "cot": "full"}
 
 

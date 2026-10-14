@@ -31,7 +31,7 @@ EXPECTED_WEIGHTS = {
 
 OPTIONS_SCHEMA = {
     "type": "object",
-    "properties": {"seed": {"type": "integer", "minimum": 0, "maximum": 2**63 - 1,
+    "properties": {"seed": {"type": "integer", "minimum": 0, "maximum": 2**32 - 1,
                               "default": 831001}},
     "additionalProperties": False,
 }

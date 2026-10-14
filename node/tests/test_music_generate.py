@@ -17,6 +17,7 @@ from mmp_node.registry import EngineSpec
     {"style": " ", "lyrics": "[Verse]\nHello"},
     {"style": "pop", "lyrics": ""},
     {"style": "pop", "lyrics": "Hello", "options": {"seed": True}},
+    {"style": "pop", "lyrics": "Hello", "options": {"seed": 2**32}},
     {"style": "pop", "lyrics": "Hello", "score": " "},
 ])
 def test_invalid_inputs_fail_before_loading(arguments):

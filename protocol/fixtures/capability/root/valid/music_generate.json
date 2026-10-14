@@ -9,7 +9,7 @@
       "engine": "yue2-bf16-cudnn",
       "engine_version": "1-0.1.6-cudnn-8f24312f-152733a1",
       "cost": "high",
-      "vram_mb": 12000,
+      "vram_mb": 15000,
       "max_concurrency": 1
     }
   ],

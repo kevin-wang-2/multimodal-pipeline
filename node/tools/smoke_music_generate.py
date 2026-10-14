@@ -55,7 +55,7 @@ async def main():
     with tempfile.TemporaryDirectory() as temporary:
         cfg = Config.model_validate({
             "node": {"id": "music-smoke", "key": "music-smoke-key-012345", "data_dir": temporary},
-            "scheduler": {"vram_total_mb": 16303, "vram_headroom_mb": 4096,
+            "scheduler": {"vram_total_mb": 16303, "vram_headroom_mb": 1024,
                           "engine_start_timeout_sec": 120},
             "engines": {"music_generate": {"module": "engines.music_generate", "python": python,
                                             "timeout_sec": 900, "env": {"MMP_YUE2_ROOT": root}}},

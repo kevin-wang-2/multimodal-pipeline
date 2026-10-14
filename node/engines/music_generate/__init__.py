@@ -38,8 +38,10 @@ OPTIONS_SCHEMA = {
 CAPABILITIES = [{
     "id": "music.generate", "visibility": "public", "purpose": "music.generate",
     "description": "YuE2 BF16：风格与分段歌词生成 48 kHz 双声道歌曲，可提供或修改 ABC 曲谱后重新生成整曲。检查 metadata.truncated 判断是否达到序列上限。大音频需要 delivery.audio PUT 端点。",
+    # Reserve the pinned runtime's GPU allocation ceiling plus CUDA workspace,
+    # rather than treating one sampled song's peak as every input's upper bound.
     "tiers": [{"tier": "gpu", "engine": ENGINE, "engine_version": ENGINE_VERSION,
-               "cost": "high", "vram_mb": 12000, "max_concurrency": 1}],
+               "cost": "high", "vram_mb": 15000, "max_concurrency": 1}],
     "input": {"fields": [
         {"name": "style", "kind": "text", "required": True,
          "description": "音乐风格、语言、乐器、演唱特点与速度",

@@ -113,3 +113,11 @@ def test_git_comparison_covers_pr_history_push_and_renames(tmp_path, monkeypatch
     assert sorted(ci.changed_paths(base, head, "push")) == ["new.py", "old.py"]
     with pytest.raises(subprocess.CalledProcessError):
         ci.changed_paths("missing-base", head, "push")
+
+
+def test_isolated_plugin_commands_can_import_engine_sources(tmp_path, monkeypatch):
+    # A full pytest collection can accidentally put node/ on sys.path; a fresh child cannot.
+    (tmp_path / "external_plugin_dependency.py").write_text("VALUE = 42\n")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    ci.run(["isolated"], {"isolated": {"smoke": [["{python}", "-c",
+        "import engines, external_plugin_dependency; assert external_plugin_dependency.VALUE == 42"]]}})

@@ -57,6 +57,8 @@ def run(names: list[str], suites: dict[str, dict]) -> None:
             subprocess.run(["nvidia-smi"], check=True)
             checked_gpu = True
         env = {**os.environ, **suite.get("env", {})}
+        # Engines are source-loaded plugins, not part of the installed node package.
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(ROOT / "node"), env.get("PYTHONPATH")]))
         for command in suite["smoke"]:
             argv = [sys.executable if arg == "{python}" else string.Template(arg).substitute(env)
                     for arg in command]

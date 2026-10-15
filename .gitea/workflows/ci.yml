@@ -1,4 +1,4 @@
-# 合并门禁：Linux 契约/单测 + Windows GPU 真模型冒烟。
+# 合并门禁：Linux 契约/单测 + Windows 平台验证与按插件选择的冒烟。
 # main push 两项成功后，分别部署 Windows 算力节点和公网 B-ts broker。
 #
 # 本实例的 runner 访问不到 github.com，不用 actions/*；检出按本实例惯例手工 git fetch。
@@ -18,6 +18,8 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      smoke_plugins: ${{ steps.smoke_plan.outputs.plugins }}
     env:
       PIP_DEFAULT_TIMEOUT: "120"
       PIP_RETRIES: "5"
@@ -29,8 +31,19 @@ jobs:
         run: |
           git init -q .
           git remote add origin ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git
-          git -c http.extraHeader="Authorization: token $TOKEN" fetch -q --depth 1 origin "$GITHUB_SHA"
+          git -c http.extraHeader="Authorization: token $TOKEN" fetch -q --no-tags origin "$GITHUB_SHA"
           git checkout -q -f FETCH_HEAD
+
+      - name: Select plugin smoke suites
+        id: smoke_plan
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git -c http.extraHeader="Authorization: token $TOKEN" fetch -q --no-tags origin "$BASE_SHA"
+          fi
+          python3 tools/ci/plugin_smoke.py plan
 
       - name: Toolchain
         run: |
@@ -71,17 +84,22 @@ jobs:
         working-directory: ts
 
       - name: Node acceptance (A + B-py echo, B-py scenarios, A ws client vs real B-ts)
-        run: ../.venv/bin/python -m pytest -q
+        run: ../.venv/bin/python -m pytest -q -m "not real_model"
         working-directory: node
+
+      - name: CI selection tests
+        run: .venv/bin/python -m pytest -q tools/ci/test_plugin_smoke.py
 
       - name: Deployment scripts parse
         run: bash -n tools/deploy/linux-broker.sh
 
   smoke:
+    needs: [unit]
     runs-on: windows
     timeout-minutes: 30
     env:
       PYTHONUTF8: "1"
+      SMOKE_PLUGINS: ${{ needs.unit.outputs.smoke_plugins }}
       PY_NODE: C:\ProgramData\miniconda3\envs\mmp-node\python.exe
       MMP_FFMPEG: ${{ vars.MMP_FFMPEG }}
       MMP_FFPROBE: ${{ vars.MMP_FFPROBE }}
@@ -118,17 +136,12 @@ jobs:
           git remote add origin %GITHUB_SERVER_URL%/%GITHUB_REPOSITORY%.git
           git -c http.extraHeader="Authorization: token %TOKEN%" fetch -q --depth 1 origin %GITHUB_SHA%
           git checkout -q -f FETCH_HEAD
-      - name: GPU visible
-        shell: cmd
-        run: nvidia-smi
       - name: Install node package into mmp-node env
         shell: cmd
         run: |
           @echo off
           %PY_NODE% --version
           %PY_NODE% -m pip install -q -e "node[dev]" || exit /b 1
-          %MMP_ENGINE_PYTHON% -c "import sherpa_onnx, onnxruntime; print('engine env ok', sherpa_onnx.__version__)" || exit /b 1
-          %MMP_IMAGE_PYTHON% -c "import torch, transformers, PIL; print('image env ok', torch.__version__, transformers.__version__)" || exit /b 1
           %PY_NODE% node\tools\check_media_tools.py || exit /b 1
       - name: Build ts workspace (B-ts for the ws integration test)
         shell: cmd
@@ -140,38 +153,13 @@ jobs:
           call pnpm install --frozen-lockfile || exit /b 1
           call pnpm -r build || exit /b 1
           dir packages\broker\dist\cli.js || exit /b 1
-      - name: Node acceptance on Windows (echo + triage.audio real model + ws vs B-ts)
+      - name: Node acceptance on Windows (no real models)
         shell: cmd
         working-directory: node
-        run: '%PY_NODE% -m pytest -q -p no:cacheprovider'
-      - name: Real-model smoke on M0 clips
+        run: '%PY_NODE% -m pytest -q -p no:cacheprovider -m "not real_model"'
+      - name: Selected plugin smoke suites (serial)
         shell: cmd
-        run: |
-          @echo off
-          if not exist ci-out mkdir ci-out
-          set MMP_SMOKE_DUMP=ci-out
-          %PY_NODE% node\tools\smoke_triage_audio.py || exit /b 1
-      - name: triage.image real-model smoke
-        shell: cmd
-        run: '%PY_NODE% node\tools\smoke_triage_image.py || exit /b 1'
-      - name: ocr.structured smoke
-        shell: cmd
-        run: |
-          @echo off
-          %MMP_OCR_PYTHON% node\engines\ocr_structured\setup_env.py verify --env ocrlab || exit /b 1
-          %PY_NODE% node\tools\smoke_ocr_structured.py || exit /b 1
-      - name: image.generate real-model smoke and resource recovery
-        shell: cmd
-        run: '%PY_NODE% node\tools\smoke_image_generate.py || exit /b 1'
-      - name: Qwen image generation, edit, continuous edit and cache smoke
-        shell: cmd
-        run: '%PY_NODE% node\tools\smoke_qwen_image_internal.py || exit /b 1'
-      - name: YuE2 BF16 cuDNN generation, score reuse, cache and cancel smoke
-        shell: cmd
-        run: |
-          @echo off
-          %MMP_YUE2_PYTHON% node\engines\music_generate\setup_env.py verify --root %MMP_YUE2_ROOT% || exit /b 1
-          %PY_NODE% node\tools\smoke_music_generate.py || exit /b 1
+        run: '%PY_NODE% tools\ci\plugin_smoke.py run'
 
   deploy-node:
     needs: [unit, smoke, deploy-broker]

@@ -1,0 +1,8 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+watch = [
+  "node/engines/common/media_tools.py",
+  "node/tests/test_media_tools.py",
+]
+smoke = [
+  ["{python}", "-m", "pytest", "-q", "node/tests/test_media_tools.py::test_real_audio_split_array_and_cached_continuation"],
+]

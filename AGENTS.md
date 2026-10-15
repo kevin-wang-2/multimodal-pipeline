@@ -28,8 +28,8 @@
 
 - `origin` is the private Gitea promotion and deployment authority. Internal development, trusted Linux/GPU validation, deployment, and issues run there.
 - `github` is the public contribution intake. External pull requests run secret-free hosted Linux CI, then a maintainer explicitly imports the exact head commit into a Gitea pull request; never merge a GitHub pull request directly.
-- Gitea pull requests require Linux unit, Windows GPU smoke, and code-owner approval. A merged `main` is deployed as the same exact SHA to the Windows node and the standalone B-ts broker only after both suites pass; either deployment must health-check and roll back independently.
-- GitHub `main` is fast-forwarded from Gitea only after Gitea unit, GPU smoke, and deployment all succeed. Divergence is an error; synchronization must never force-push `main`.
+- Gitea pull requests require Linux unit, Windows platform tests plus selected plugin smoke suites, and code-owner approval. Each plugin owns its smoke commands and additional watched paths in `node/engines/<plugin>/ci.toml`. Changes to the A-to-engine contract (`engine-io.schema.json`, `mmp_node/engine_io.py`, or `engines/common/io.py`) require all plugin smoke suites; external API, queue, and cache changes require public contract/unit/integration tests without real-model smoke unless they also change a plugin or the A-to-engine contract. A merged `main` is deployed as the same exact SHA to the Windows node and the standalone B-ts broker only after both jobs pass; either deployment must health-check and roll back independently.
+- GitHub `main` is fast-forwarded from Gitea only after Gitea unit, Windows tests/selected smoke, and deployment all succeed. Divergence is an error; synchronization must never force-push `main`.
 - Local `main` tracks `origin/main`. Normal internal work goes through a Gitea pull request; do not push directly to either protected `main`.
 - Public releases use `vX.Y.Z` tags and GitHub Releases. Internal `npm-v*` tags trigger Verdaccio publication and may be mirrored as ordinary Git refs, but they do not create GitHub Releases and are not public project versions.
 - Do not commit machine names, credentials, tokens, model weights, private media, or local deployment configuration. Machine-specific instructions belong in ignored `AGENTS.md.local`.
@@ -44,5 +44,5 @@
 ## Verification
 
 - Run contract tests on both Python and TypeScript sides after protocol changes.
-- Run targeted tests first, then the relevant full suite. Model changes require the Windows GPU smoke workflow; TypeScript and protocol changes require Linux unit CI.
+- Run targeted tests first, then the relevant full suite. Model changes require their plugin-owned Windows smoke suite; TypeScript and public protocol changes require Linux unit CI. Internal A-to-engine protocol changes require all plugin smoke suites. Manual CI dispatch runs all smoke suites.
 - Preserve explicit degradation behavior. Network or environment failures are not code verdicts, and a completed workflow is not success until its conclusion is checked.

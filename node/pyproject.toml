@@ -38,3 +38,4 @@ packages = ["mmp_node", "mmp_broker"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+markers = ["real_model: starts a real model; run through the plugin-owned smoke suite in CI"]

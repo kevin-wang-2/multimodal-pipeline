@@ -1,0 +1,10 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+gpu = true
+watch = [
+  "node/tools/smoke_music_generate.py",
+  "node/tests/test_music_generate.py",
+]
+smoke = [
+  ["$MMP_YUE2_PYTHON", "node/engines/music_generate/setup_env.py", "verify", "--root", "$MMP_YUE2_ROOT"],
+  ["{python}", "node/tools/smoke_music_generate.py"],
+]

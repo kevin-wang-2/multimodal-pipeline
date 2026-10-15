@@ -54,5 +54,7 @@ jobs:
           pnpm release:pack
         working-directory: ts
       - name: Node acceptance
-        run: python -m pytest -q
+        run: python -m pytest -q -m "not real_model"
         working-directory: node
+      - name: CI selection tests
+        run: python -m pytest -q tools/ci/test_plugin_smoke.py

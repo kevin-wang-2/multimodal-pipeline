@@ -1,0 +1,9 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+gpu = true
+watch = [
+  "node/tools/smoke_qwen_image_internal.py",
+  "node/tests/test_qwen_image_internal.py",
+]
+smoke = [
+  ["{python}", "node/tools/smoke_qwen_image_internal.py"],
+]

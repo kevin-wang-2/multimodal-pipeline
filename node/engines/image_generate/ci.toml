@@ -1,0 +1,9 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+gpu = true
+watch = [
+  "node/tools/smoke_image_generate.py",
+  "node/tests/test_image_generate.py",
+]
+smoke = [
+  ["{python}", "node/tools/smoke_image_generate.py"],
+]

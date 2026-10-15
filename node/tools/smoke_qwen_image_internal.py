@@ -81,8 +81,8 @@ async def main() -> None:
         records = []
         try:
             caps = {item["capability"]["id"] for item in broker.capabilities()[1]["capabilities"]}
-            assert caps == {"image.generate.qwen", "image.edit.qwen"}
-            assert node.register_message()["payload"]["capabilities"] == []
+            assert caps == {"image.generate.qwen", "image.edit.qwen", "media.deliver"}
+            assert [cap["id"] for cap in node.register_message()["payload"]["capabilities"]] == ["media.deliver"]
 
             generated, wall = await finish(broker, {
                 "type": "image.generate.qwen",

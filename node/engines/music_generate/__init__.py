@@ -6,7 +6,7 @@ MODEL_REPOSITORY = "m-a-p/YuE2-3B"
 MODEL_REVISION = "8f24312f187763b9854adeec87e437e2b03bbff1"
 VAE_REPOSITORY = "m-a-p/YuE2-Vae"
 VAE_REVISION = "152733a19ad43aa67e367f9b5503ef8075bb5126"
-ENGINE_VERSION = "1-0.1.6-cudnn-8f24312f-152733a1"
+ENGINE_VERSION = "2-0.1.6-cudnn-8f24312f-152733a1"
 
 EXPECTED_WEIGHTS = {
     "mot": {
@@ -32,12 +32,13 @@ EXPECTED_WEIGHTS = {
 OPTIONS_SCHEMA = {
     "type": "object",
     "properties": {"seed": {"type": "integer", "minimum": 0, "maximum": 2**32 - 1,
-                              "default": 831001}},
+                              "default": 831001},
+                   "mode": {"type": "string", "enum": ["song", "instrumental"], "default": "song"}},
     "additionalProperties": False,
 }
 CAPABILITIES = [{
     "id": "music.generate", "visibility": "public", "purpose": "music.generate",
-    "description": "YuE2 BF16：风格与分段歌词生成 48 kHz 双声道歌曲，可提供或修改 ABC 曲谱后重新生成整曲。检查 metadata.truncated 判断是否达到序列上限。大音频需要 delivery.audio PUT 端点。",
+    "description": "YuE2 BF16：song 歌曲与 instrumental 纯音乐生成，48 kHz 双声道 FLAC。纯音乐 lyrics 为可选结构描述；模型规划后将 Vocal 音符转入 Ins，再以固定曲谱生成。大音频需要 delivery.audio PUT 端点。",
     # Reserve the pinned runtime's GPU allocation ceiling plus CUDA workspace,
     # rather than treating one sampled song's peak as every input's upper bound.
     "tiers": [{"tier": "gpu", "engine": ENGINE, "engine_version": ENGINE_VERSION,
@@ -46,14 +47,14 @@ CAPABILITIES = [{
         {"name": "style", "kind": "text", "required": True,
          "description": "音乐风格、语言、乐器、演唱特点与速度",
          "schema": {"type": "string", "minLength": 1, "maxLength": 4000}},
-        {"name": "lyrics", "kind": "text", "required": True,
-         "description": "使用 [Verse]、[Chorus] 等曲式标签的歌词",
-         "schema": {"type": "string", "minLength": 1, "maxLength": 12000}},
+        {"name": "lyrics", "kind": "text", "required": False,
+         "description": "song 模式必须提供演唱歌词；instrumental 模式为可选结构描述（段落、发展与编排），不会作为演唱文字。省略时由模型规划结构。",
+         "schema": {"type": "string", "minLength": 0, "maxLength": 12000}},
         {"name": "score", "kind": "text", "required": False,
          "description": "可选 YuE2 原生 ABC 曲谱；可将上一轮返回的 score 修改后作为新输入",
          "schema": {"type": "string", "minLength": 1, "maxLength": 50000}},
         {"name": "options", "kind": "json", "required": False,
-         "description": "随机种子；生成配方固定为 BF16、full 乐谱规划与 32 步",
+         "description": "mode 选择 song（默认）或 instrumental；seed 为随机种子。固定 BF16、full 乐谱规划与 32 步。",
          "schema": OPTIONS_SCHEMA},
     ]},
     "output": {"agent_context": "none", "fields": [
@@ -62,12 +63,17 @@ CAPABILITIES = [{
          "cardinality": {"min": 1, "max": 1}},
         {"name": "score", "kind": "text", "required": True,
          "description": "生成或使用的 ABC 曲谱", "schema": {"type": "string"}},
+        {"name": "source_score", "kind": "text", "required": False,
+         "description": "纯音乐模式转换前的模型原谱或用户输入谱，便于与最终 score 对照。",
+         "schema": {"type": "string"}},
         {"name": "metadata", "kind": "json", "required": True,
          "description": "音频信息、随机种子、截断状态与固定执行配方",
          "schema": {"type": "object", "properties": {
              "sample_rate": {"const": 48000}, "channels": {"const": 2},
              "duration_sec": {"type": "number", "exclusiveMinimum": 0},
              "seed": {"type": "integer", "minimum": 0},
+             "mode": {"type": "string", "enum": ["song", "instrumental"]},
+             "conversion": {"type": "object", "description": "纯音乐转谱检查及声部重叠时保留或缩减的器乐音符。"},
              "truncated": {"type": "object", "properties": {
                  "abc": {"type": "boolean"}, "semantic": {"type": "boolean"}},
                  "required": ["abc", "semantic"], "additionalProperties": False},
@@ -75,7 +81,7 @@ CAPABILITIES = [{
              "model_dtype": {"const": "bfloat16"}, "vae_dtype": {"const": "float32"},
              "ode_steps": {"const": 32}, "timings_ms": {"type": "object"},
          }, "required": ["sample_rate", "channels", "duration_sec", "seed", "truncated",
-                         "attention", "ar_execution", "model_dtype", "vae_dtype", "ode_steps"],
+                         "attention", "ar_execution", "model_dtype", "vae_dtype", "ode_steps", "mode"],
              "additionalProperties": False}},
     ]},
 }]

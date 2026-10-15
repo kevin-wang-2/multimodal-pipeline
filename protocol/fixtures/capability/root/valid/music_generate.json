@@ -2,12 +2,12 @@
   "id": "music.generate",
   "visibility": "public",
   "purpose": "music.generate",
-  "description": "YuE2 BF16：风格与分段歌词生成 48 kHz 双声道歌曲，可提供或修改 ABC 曲谱后重新生成整曲。检查 metadata.truncated 判断是否达到序列上限。大音频需要 delivery.audio PUT 端点。",
+  "description": "YuE2 BF16：song 歌曲与 instrumental 纯音乐生成，48 kHz 双声道 FLAC。纯音乐 lyrics 为可选结构描述；模型规划后将 Vocal 音符转入 Ins，再以固定曲谱生成。大音频需要 delivery.audio PUT 端点。",
   "tiers": [
     {
       "tier": "gpu",
       "engine": "yue2-bf16-cudnn",
-      "engine_version": "1-0.1.6-cudnn-8f24312f-152733a1",
+      "engine_version": "2-0.1.6-cudnn-8f24312f-152733a1",
       "cost": "high",
       "vram_mb": 15000,
       "max_concurrency": 1
@@ -29,11 +29,11 @@
       {
         "name": "lyrics",
         "kind": "text",
-        "required": true,
-        "description": "使用 [Verse]、[Chorus] 等曲式标签的歌词",
+        "required": false,
+        "description": "song 模式必须提供演唱歌词；instrumental 模式为可选结构描述（段落、发展与编排），不会作为演唱文字。省略时由模型规划结构。",
         "schema": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 12000
         }
       },
@@ -52,7 +52,7 @@
         "name": "options",
         "kind": "json",
         "required": false,
-        "description": "随机种子；生成配方固定为 BF16、full 乐谱规划与 32 步",
+        "description": "mode 选择 song（默认）或 instrumental；seed 为随机种子。固定 BF16、full 乐谱规划与 32 步。",
         "schema": {
           "type": "object",
           "properties": {
@@ -61,6 +61,14 @@
               "minimum": 0,
               "maximum": 4294967295,
               "default": 831001
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "song",
+                "instrumental"
+              ],
+              "default": "song"
             }
           },
           "additionalProperties": false
@@ -89,6 +97,15 @@
         "kind": "text",
         "required": true,
         "description": "生成或使用的 ABC 曲谱",
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "source_score",
+        "kind": "text",
+        "required": false,
+        "description": "纯音乐模式转换前的模型原谱或用户输入谱，便于与最终 score 对照。",
         "schema": {
           "type": "string"
         }
@@ -148,6 +165,17 @@
             },
             "timings_ms": {
               "type": "object"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "song",
+                "instrumental"
+              ]
+            },
+            "conversion": {
+              "type": "object",
+              "description": "纯音乐转谱检查及声部重叠时保留或缩减的器乐音符。"
             }
           },
           "required": [
@@ -160,7 +188,8 @@
             "ar_execution",
             "model_dtype",
             "vae_dtype",
-            "ode_steps"
+            "ode_steps",
+            "mode"
           ],
           "additionalProperties": false
         }

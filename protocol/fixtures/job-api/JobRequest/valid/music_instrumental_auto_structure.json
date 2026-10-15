@@ -1,0 +1,14 @@
+{
+  "type": "music.generate",
+  "arguments": {
+    "style": "Gentle acoustic guitar instrumental",
+    "options": {
+      "mode": "instrumental"
+    }
+  },
+  "delivery": {
+    "audio": {
+      "url": "https://storage.example/music_instrumental_auto_structure.flac"
+    }
+  }
+}

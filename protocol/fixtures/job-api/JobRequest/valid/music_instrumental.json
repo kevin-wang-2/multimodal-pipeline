@@ -1,0 +1,16 @@
+{
+  "type": "music.generate",
+  "arguments": {
+    "style": "Warm solo piano, 88 BPM",
+    "lyrics": "[Intro] 稀疏钢琴开场\n[Verse] 主旋律逐渐展开\n[Outro] 渐弱收尾",
+    "options": {
+      "mode": "instrumental",
+      "seed": 831001
+    }
+  },
+  "delivery": {
+    "audio": {
+      "url": "https://storage.example/music_instrumental.flac"
+    }
+  }
+}

@@ -123,6 +123,7 @@ def _engine_ready() -> bool:
 real_model = pytest.mark.skipif(not _engine_ready(), reason="需要 models/、testdata/ 与装了 sherpa-onnx 的引擎解释器")
 
 
+@pytest.mark.real_model
 @real_model
 async def test_triage_audio_end_to_end(tmp_path):
     s = await build_stack(tmp_path, engines={"triage_audio": {"module": "engines.triage_audio", "timeout_sec": 120, "python": ENGINE_PY,

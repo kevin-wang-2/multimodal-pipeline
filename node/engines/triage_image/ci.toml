@@ -1,0 +1,11 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+gpu = true
+watch = [
+  "node/tools/smoke_triage_image.py",
+  "node/tests/test_triage_image.py",
+  "node/engines/triage_image_large.py",
+  "node/engines/ocr_structured/pages.py",
+]
+smoke = [
+  ["{python}", "node/tools/smoke_triage_image.py"],
+]

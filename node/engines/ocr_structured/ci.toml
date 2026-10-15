@@ -1,0 +1,10 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+gpu = true
+watch = [
+  "node/tools/smoke_ocr_structured.py",
+  "node/tests/test_ocr_structured.py",
+]
+smoke = [
+  ["$MMP_OCR_PYTHON", "node/engines/ocr_structured/setup_env.py", "verify", "--env", "ocrlab"],
+  ["{python}", "node/tools/smoke_ocr_structured.py"],
+]

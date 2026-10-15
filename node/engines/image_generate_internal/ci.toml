@@ -1,0 +1,9 @@
+# Plugin-owned smoke commands; paths are relative to the repository root.
+watch = [
+  "node/engines/image_generate/*",
+  "node/tests/test_internal_capabilities.py",
+  "node/tests/test_qwen_image_internal.py",
+]
+smoke = [
+  ["{python}", "-m", "pytest", "-q", "node/tests/test_internal_capabilities.py", "node/tests/test_qwen_image_internal.py::test_qwen_and_krea_internal_capabilities_coexist_but_remote_registration_hides_both"],
+]

@@ -106,6 +106,13 @@ class Node:
         self.sched.check_backpressure(len(self._preparing))
         delivery = self._validate_delivery(cap, req.get("delivery") or {})
         arguments = self._validate_arguments(cap, req.get("arguments") or {})
+        if task_type == "media.deliver":
+            handles = arguments["media"] if isinstance(arguments["media"], list) else [arguments["media"]]
+            arguments["media"] = handles
+            if any("ref" not in handle or "inline" in handle or "get" in handle for handle in handles):
+                raise ApiError("bad_request", "media.deliver accepts existing media refs only")
+            if len(delivery.get("media", [])) != len(handles):
+                raise ApiError("bad_request", "delivery.media must contain one endpoint per media ref")
         submission_key = task_key(task_type, tier["tier"], tier["engine_version"], arguments, bound=bound)
         job = next((j for j in self.jobs.values() if not j.terminal
                     and j.submission_key == submission_key and j.delivery == delivery), None)
@@ -128,6 +135,11 @@ class Node:
             job.arguments, job.media_ids, job.media_content_types = arguments, media_ids, media_types
             job.timings_ms["fetch"] = int((time.monotonic() - t_fetch) * 1000)
             job.key = task_key(job.task_type, job.tier["tier"], job.tier["engine_version"], cache_arguments, bound=job.bound)
+            if job.task_type == "media.deliver":
+                # Uploads are side effects: every submission must execute, never reuse a cached receipt.
+                self.sched.enqueue(job)
+                enqueued = True
+                return
             hit = self.cache.get(job.key)
             if hit is not None:
                 job.cached, job.source = True, hit["source"]

@@ -14,6 +14,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .cache import ResultCache
 from .config import Config
@@ -205,6 +206,10 @@ class Scheduler:
         phase_metrics: dict[str, float] = {}
         wasted_ms = 0
         try:
+            if job.task_type == "media.deliver":
+                await self._deliver(job)
+                job.finish("done")
+                return
             await self._normalize_media(job)
             spec = self.registry.engine_for(job.task_type, job.tier["tier"])
             while True:
@@ -393,8 +398,34 @@ class Scheduler:
             raise ApiError("engine_failed", "agent_context violates protocol: " + "; ".join(errs[:3]))
         return context
 
+    async def _deliver(self, job: Job) -> None:
+        """Upload pinned references with bounded concurrency; never invoke or cache an engine."""
+        slots = asyncio.Semaphore(4)
+
+        async def upload(item: dict, endpoint: dict) -> dict:
+            async with slots:
+                blob = Path(item["path"]).read_bytes()
+                content_type = self.media.content_type(item["media_id"]) or "application/octet-stream"
+                await self.media.put(endpoint, blob, content_type)
+                return {"kind": "media", "media_id": item["media_id"],
+                        "sha256": item["media_id"].removeprefix("sha256:"),
+                        "content_type": content_type, "bytes": len(blob), "delivered": True}
+
+        # Wait for all uploads before releasing pins, including when one PUT fails.
+        results = await asyncio.gather(*(upload(item, endpoint) for item, endpoint in
+                                        zip(job.arguments["media"], job.delivery["media"])),
+                                       return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+        job.outputs = {"media": results}
+        job.source = {"tier": "cpu", "engine": "media-store", "engine_version": "1",
+                      "generated_at": _now_iso(), "degraded": False, "arguments": {}}
+        job.usage = {"served_from": "compute", "tier": "cpu", "engine": "media-store",
+                     "compute_ms": 0, "wasted_ms": 0}
+
     async def _place_outputs(self, job: Job, outputs: dict) -> None:
-        """把 engine media payload 交付到调用方 PUT 或转换为受限内联值。"""
+        """把 engine media payload 存储为引用，并按请求 PUT 或返回受限内联值。"""
         public: dict = {}
         for name, output in outputs.items():
             field = next(field for field in self.registry.capability(job.task_type)["output"]["fields"]
@@ -427,9 +458,7 @@ class Scheduler:
         if endpoint is not None:
             await self.media.put(endpoint, blob, output["content_type"])
             descriptor["delivered"] = True
-        else:
-            if len(blob) > self.cfg.media.max_inline_result_bytes:
-                raise ApiError("engine_failed", f"media output {name!r} is {len(blob)} bytes > inline limit and has no delivery endpoint")
+        elif len(blob) <= self.cfg.media.max_inline_result_bytes:
             descriptor["inline"] = output["data_base64"]
         return descriptor
 

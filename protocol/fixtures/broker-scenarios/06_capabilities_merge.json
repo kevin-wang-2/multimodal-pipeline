@@ -1,7 +1,8 @@
 {
   "description": "/capabilities 按任务类型合并，同一类型列出所有提供节点",
   "broker": {
-    "node_key": "scenario-node-key-0123456789"
+    "node_key": "scenario-node-key-0123456789",
+    "protocol_version": "3.0"
   },
   "steps": [
     {

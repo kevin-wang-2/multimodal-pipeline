@@ -13,7 +13,7 @@ const preflight = await client.run({
   arguments: { media: media.inline(new Uint8Array([137, 80, 78, 71]), "image/png") },
 });
 
-assert.deepEqual(preflight.outputs.digest.value.capabilities_available, ["ocr.structured"]);
+assert.deepEqual(preflight.outputs.digest.value.capabilities_available, ["media.deliver", "ocr.structured"]);
 const ocr = typeof client.describe === "function"
   ? await client.describe("ocr.structured")
   : (await client.capabilities()).capabilities.find(({ capability }) => capability.id === "ocr.structured")?.capability;

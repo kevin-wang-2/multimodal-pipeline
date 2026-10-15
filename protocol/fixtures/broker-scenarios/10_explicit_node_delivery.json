@@ -1,0 +1,310 @@
+{
+  "description": "显式 node_id 优先于队列长度；目标离线或不支持能力时不回退到其他节点",
+  "broker": {
+    "node_key": "scenario-node-key-0123456789",
+    "protocol_version": "3.1"
+  },
+  "steps": [
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "3.0",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "media.deliver",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
+              },
+              "purpose": "media.deliver",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
+              },
+              "visibility": "public"
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "replies": {
+        "submit": {
+          "http_status": 200,
+          "body": {
+            "job_id": "$echo_job_id",
+            "type": "media.deliver",
+            "status": "done",
+            "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+            "cached": false,
+            "source": {
+              "tier": "cpu",
+              "engine": "e-echo",
+              "engine_version": "1",
+              "generated_at": "2026-09-21T00:00:00Z",
+              "degraded": false
+            },
+            "result": {
+              "from": "node-a"
+            }
+          }
+        }
+      }
+    },
+    {
+      "register": {
+        "type": "register",
+        "protocol_version": "3.0",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-b",
+          "node_key": "scenario-node-key-0123456789",
+          "capabilities": [
+            {
+              "id": "media.deliver",
+              "tiers": [
+                {
+                  "tier": "cpu",
+                  "engine": "e-echo",
+                  "engine_version": "1",
+                  "cost": "low"
+                }
+              ],
+              "input": {
+                "media": {
+                  "presence": "required",
+                  "accepts": [
+                    "*/*"
+                  ]
+                }
+              },
+              "purpose": "media.deliver",
+              "output": {
+                "schema": {
+                  "type": "object"
+                },
+                "agent_context": "none"
+              },
+              "visibility": "public"
+            }
+          ],
+          "engine_versions": {
+            "e-echo": "1"
+          }
+        }
+      },
+      "replies": {
+        "submit": {
+          "http_status": 200,
+          "body": {
+            "job_id": "$echo_job_id",
+            "type": "media.deliver",
+            "status": "done",
+            "media_id": "sha256:6b4a2b8c89e0bcf240920e7922d8d77666f7b61a11ba2ba7389f8156986220f1",
+            "cached": false,
+            "source": {
+              "tier": "cpu",
+              "engine": "e-echo",
+              "engine_version": "1",
+              "generated_at": "2026-09-21T00:00:00Z",
+              "degraded": false
+            },
+            "result": {
+              "from": "node-b"
+            }
+          }
+        }
+      }
+    },
+    {
+      "heartbeat": {
+        "type": "heartbeat",
+        "protocol_version": "3.0",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-a",
+          "queue_len": 5,
+          "running": 0,
+          "engines_loaded": []
+        }
+      }
+    },
+    {
+      "heartbeat": {
+        "type": "heartbeat",
+        "protocol_version": "3.0",
+        "ts": "2026-09-21T00:00:00Z",
+        "payload": {
+          "node_id": "node-b",
+          "queue_len": 1,
+          "running": 0,
+          "engines_loaded": []
+        }
+      }
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "media.deliver",
+        "node_id": "node-a",
+        "arguments": {
+          "media": [
+            {
+              "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "delivery": {
+          "media": [
+            {
+              "url": "https://upload.example/one"
+            },
+            {
+              "url": "https://upload.example/two"
+            }
+          ]
+        },
+        "wait": 30
+      },
+      "expect": {
+        "http_status": 200,
+        "body": {
+          "result": {
+            "from": "node-a"
+          }
+        }
+      },
+      "expect_routed_to": "node-a"
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "media.deliver",
+        "node_id": "missing",
+        "arguments": {
+          "media": [
+            {
+              "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "delivery": {
+          "media": [
+            {
+              "url": "https://upload.example/one"
+            },
+            {
+              "url": "https://upload.example/two"
+            }
+          ]
+        },
+        "wait": 30
+      },
+      "expect": {
+        "http_status": 503,
+        "body": {
+          "error": "node_offline"
+        }
+      },
+      "expect_routed_to": null
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "unknown",
+        "node_id": "node-a",
+        "arguments": {
+          "media": [
+            {
+              "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "delivery": {
+          "media": [
+            {
+              "url": "https://upload.example/one"
+            },
+            {
+              "url": "https://upload.example/two"
+            }
+          ]
+        },
+        "wait": 30
+      },
+      "expect": {
+        "http_status": 503,
+        "body": {
+          "error": "no_node"
+        }
+      },
+      "expect_routed_to": null
+    },
+    {
+      "disconnect": "node-a"
+    },
+    {
+      "op": "submit",
+      "args": {
+        "type": "media.deliver",
+        "node_id": "node-a",
+        "arguments": {
+          "media": [
+            {
+              "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "delivery": {
+          "media": [
+            {
+              "url": "https://upload.example/one"
+            },
+            {
+              "url": "https://upload.example/two"
+            }
+          ]
+        },
+        "wait": 30
+      },
+      "expect": {
+        "http_status": 503,
+        "body": {
+          "error": "node_offline"
+        }
+      },
+      "expect_routed_to": null
+    }
+  ]
+}

@@ -54,6 +54,18 @@ module = "engines.echo"             # python -m <module>，cwd = node/
 timeout_sec = 30                    # 单任务时限；超时且无更便宜档 → 504 timeout
 # max_concurrency = 2               # 覆盖 CAPABILITY.tiers[].max_concurrency（按 tier 名）
 
+# 基础媒体组：先 pip install -e 'node[media]'，并安装带常用编码器的 FFmpeg 与 FFprobe。
+# 每个引擎内部全局串行，不同操作不会并发堆积解码内存；CPU 进程按 idle_unload_sec 回收。
+[engines.media_image]
+module = "engines.media_image"
+timeout_sec = 120
+# env = { MMP_IMAGE_MAX_PIXELS = "16000000", MMP_IMAGE_MAX_TOTAL_PIXELS = "24000000", MMP_IMAGE_MAX_INPUT_BYTES = "67108864", MMP_IMAGE_MAX_OUTPUT_BYTES = "67108864" }
+
+[engines.media_audio]
+module = "engines.media_audio"
+timeout_sec = 120
+# env = { MMP_FFMPEG = "ffmpeg", MMP_FFPROBE = "ffprobe", MMP_AUDIO_MAX_DURATION_SEC = "3600", MMP_AUDIO_MAX_OUTPUT_BYTES = "67108864" }
+
 # GPU 常驻是“空闲偏好”而不是不可驱逐：容量够可与重模型共存，超预算只驱逐空闲模型。
 # [engines.triage_image]
 # module = "engines.triage_image"

@@ -18,6 +18,7 @@ from mmp_broker.core import Broker
 from mmp_broker.inproc import InProcLink
 from mmp_node.config import Config
 from mmp_node.node import Node
+from engines.music_generate.symbolic.abc import parse_abc
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -104,7 +105,25 @@ async def main():
             assert not revised["cached"] and revised["outputs"]["score"]["text"] == score
             (destination / "score-reuse.flac").write_bytes(Handler.files["/score-reuse.flac"])
 
-            _, running = await broker.submit(body({**arguments, "options": {"seed": 43}}, "cancelled"))
+            instrumental = {"style": "Warm solo piano instrumental, lyrical, gentle, 88 BPM",
+                            "lyrics": "[Intro] 稀疏钢琴开场\n[Verse] 主旋律展开\n[Outro] 渐弱收尾",
+                            "options": {"mode": "instrumental", "seed": 831001}}
+            _, generated = await broker.submit(body(instrumental, "instrumental"))
+            generated = await finish(generated)
+            value = generated["outputs"]["metadata"]["value"]
+            assert value["mode"] == "instrumental" and value["conversion"]["vocal_notes_after"] == 0
+            instrumental_score = generated["outputs"]["score"]["text"]
+            parsed = parse_abc(instrumental_score)
+            assert not parsed.voices["Vocal"].notes and parsed.voices["Ins"].notes
+            (destination / "instrumental.flac").write_bytes(Handler.files["/instrumental.flac"])
+            (destination / "instrumental.abc").write_text(instrumental_score, encoding="utf-8")
+            (destination / "instrumental-source.abc").write_text(generated["outputs"]["source_score"]["text"], encoding="utf-8")
+            (destination / "instrumental-result.json").write_text(json.dumps(generated, ensure_ascii=False, indent=2), encoding="utf-8")
+            _, cached_instrumental = await broker.submit({**body(instrumental, "instrumental-cached"), "wait": 120})
+            assert cached_instrumental["cached"] and cached_instrumental["usage"]["compute_ms"] == 0
+            assert Handler.files["/instrumental-cached.flac"] == Handler.files["/instrumental.flac"]
+
+            _, running = await broker.submit(body({**instrumental, "options": {"mode": "instrumental", "seed": 43}}, "cancelled"))
             for _ in range(1200):
                 process = node.pool._procs.get("music_generate")
                 if process is not None and process.busy:
@@ -123,13 +142,19 @@ async def main():
                 raise AssertionError("cancelled engine did not release its GPU lease")
             assert "/cancelled.flac" not in Handler.files and "/queued.flac" not in Handler.files
             # Verify that the cancelled job leaves capacity available for the next generation.
-            _, recovered = await broker.submit(body({**arguments, "score": score, "options": {"seed": 44}}, "recovered"))
-            await finish(recovered)
+            _, recovered = await broker.submit(body({"style": instrumental["style"], "score": instrumental_score,
+                                                     "options": {"mode": "instrumental", "seed": 44}}, "recovered"))
+            recovered = await finish(recovered)
+            assert recovered["outputs"]["score"]["text"] == instrumental_score
+            assert recovered["outputs"]["metadata"]["value"]["mode"] == "instrumental"
+            (destination / "instrumental-score-reuse.flac").write_bytes(Handler.files["/recovered.flac"])
             (destination / "result.json").write_text(json.dumps(done, ensure_ascii=False, indent=2), encoding="utf-8")
             print(json.dumps({"status": "done", "wall_s": round(time.monotonic() - started, 2),
                               "metadata": done["outputs"]["metadata"]["value"],
                               "metrics": node.jobs[done["job_id"]].engine_metrics,
                               "cache_verified": True, "score_reuse_verified": True,
+                              "instrumental_verified": True, "instrumental_cache_verified": True,
+                              "instrumental_score_reuse_without_lyrics_verified": True,
                               "queued_cancel_verified": True, "running_cancel_verified": True,
                               "recovery_verified": True, "audio_bytes": len(audio)}), flush=True)
         finally:

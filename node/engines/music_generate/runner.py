@@ -3,29 +3,72 @@ from __future__ import annotations
 import base64
 import io
 import os
+import re
 import time
 from functools import cache, partial
 from importlib.metadata import version
 from pathlib import Path
 
 from engines.music_generate import EXPECTED_WEIGHTS, OPTIONS_SCHEMA, RUNTIME_VERSION
+from engines.music_generate.symbolic.transfer import convert_score
 
 
 def request(job: dict) -> dict:
     arguments = job.get("arguments") or {}
+    options = arguments.get("options") or {}
+    mode = options.get("mode", "song")
+    if mode not in ("song", "instrumental"):
+        raise ValueError("mode must be song or instrumental")
     result = {}
     for name, maximum in (("style", 4000), ("lyrics", 12000), ("score", 50000)):
         value = arguments.get(name)
+        if name == "lyrics" and mode == "instrumental" and value is None:
+            value = ""
         if name == "score" and value is None:
             continue
-        if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+        if (not isinstance(value, str) or len(value) > maximum
+                or (not value.strip() and not (name == "lyrics" and mode == "instrumental"))):
             raise ValueError(f"{name} must contain 1 to {maximum} characters")
         result["abc" if name == "score" else name] = value
-    options = arguments.get("options") or {}
     seed = options.get("seed", OPTIONS_SCHEMA["properties"]["seed"]["default"])
     if type(seed) is not int or not 0 <= seed < 2**32:
         raise ValueError("seed must be an integer in [0, 2**32)")
-    return {**result, "seed": seed, "cot": "full"}
+    return {**result, "seed": seed, "cot": "full", "mode": mode}
+
+
+def render(pipe, values: dict, cancelled) -> tuple[object, dict, dict]:
+    """Keep structural prose out of the sung-lyrics prompt and rebuild the ABC prefix."""
+    values = dict(values)
+    mode = values.pop("mode")
+    if mode == "song":
+        return pipe(**values, cancelled=cancelled.is_set), {}, {}
+    structure = values.pop("lyrics")
+    style = "Instrumental, " + values["style"] + ", no vocals, no singing, no choir, no spoken words."
+    if structure.strip():
+        style += "\nInstrumental structure and arrangement (not sung lyrics):\n" + structure
+    values["style"] = style
+    source = values.pop("abc", None)
+    planning_ms = 0
+    if source is None:
+        # Section tags are a planning scaffold; all free prose stays in style.
+        tags = re.findall(r"\[(Intro|Verse|Pre-Chorus|Chorus|Bridge|Interlude|Outro|Instrumental)\]",
+                          structure, flags=re.IGNORECASE)
+        scaffold = "\n\n".join(f"[{tag.title()}]" for tag in tags) if tags else "[Intro]\n\n[Verse]\n\n[Chorus]\n\n[Outro]"
+        plan = pipe.plan(**values, lyrics=scaffold, cancelled=cancelled.is_set)
+        planning_ms = int(plan.timing["seconds"] * 1000)
+        if plan.truncated or not plan.abc:
+            raise ValueError("Instrumental score planning was empty or truncated")
+        source = plan.abc
+    if cancelled.is_set():
+        raise InterruptedError("generation cancelled")
+    score, conversion = convert_score(source)
+    # Only the converted score's section tags enter the final lyrics field.
+    tags = re.findall(r"^% (.+)$", score, flags=re.MULTILINE)
+    lyrics = "\n\n".join(f"[{tag.title()}]" for tag in tags)
+    song = pipe(**values, lyrics=lyrics, abc=score, cancelled=cancelled.is_set)
+    if song.abc != score:
+        raise ValueError("Rendered score differs from the instrumental input")
+    return song, {"source_score": source, "conversion": conversion}, {"planning": planning_ms}
 
 
 @cache
@@ -61,7 +104,7 @@ def generate(values: dict, cancelled) -> tuple[dict, dict, dict]:
         # Force cuDNN for AR prefill and NAR as well as graph decode. Failure is
         # explicit: never silently fall back to the large, slow math kernel.
         with sdpa_kernel(Backend.CUDNN_ATTENTION):
-            song = pipe(**values, cancelled=cancelled.is_set)
+            song, instrumental, extra_timings = render(pipe, values, cancelled)
         if cancelled.is_set():
             raise InterruptedError("generation cancelled")
         torch.cuda.synchronize()
@@ -71,7 +114,7 @@ def generate(values: dict, cancelled) -> tuple[dict, dict, dict]:
                    "semantic": int(song.timing["semantic"]["seconds"] * 1000),
                    "nar": int(song.timing["nar_seconds"] * 1000),
                    "vae": int(song.timing["vae_seconds"] * 1000),
-                   "generate": int((time.monotonic() - started) * 1000)}
+                   "generate": int((time.monotonic() - started) * 1000), **extra_timings}
         outputs = {
             "audio": {"kind": "media", "content_type": "audio/flac",
                       "data_base64": base64.b64encode(buffer.getvalue()).decode("ascii")},
@@ -79,11 +122,15 @@ def generate(values: dict, cancelled) -> tuple[dict, dict, dict]:
             "metadata": {"kind": "json", "value": {
                 "sample_rate": song.sample_rate, "channels": song.audio.shape[1],
                 "duration_sec": len(song.audio) / song.sample_rate, "seed": values["seed"],
+                "mode": values["mode"],
                 "truncated": song.truncated, "attention": "cudnn", "ar_execution": "cuda_graph",
                 "model_dtype": "bfloat16", "vae_dtype": "float32", "ode_steps": 32,
                 "timings_ms": timings,
             }},
         }
+        if instrumental:
+            outputs["source_score"] = {"kind": "text", "text": instrumental["source_score"]}
+            outputs["metadata"]["value"]["conversion"] = instrumental["conversion"]
         metrics = {"vram_peak_mb": round(torch.cuda.max_memory_allocated() / 1048576, 1),
                    "generate_ms": timings["generate"]}
         return outputs, timings, metrics

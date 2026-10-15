@@ -38,7 +38,7 @@ OPTIONS_SCHEMA = {
 }
 CAPABILITIES = [{
     "id": "music.generate", "visibility": "public", "purpose": "music.generate",
-    "description": "YuE2 BF16：song 歌曲与 instrumental 纯音乐生成，48 kHz 双声道 FLAC。纯音乐 lyrics 为可选结构描述；模型规划后将 Vocal 音符转入 Ins，再以固定曲谱生成。大音频需要 delivery.audio PUT 端点。",
+    "description": "YuE2 BF16：song 歌曲与 instrumental 纯音乐生成，48 kHz 双声道 FLAC。纯音乐 lyrics 为可选结构描述；模型规划后将 Vocal 音符转入 Ins，再以固定曲谱生成。大音频可提供 delivery.audio PUT 端点，或先返回 media_id 再通过 media.deliver 交付。",
     # Reserve the pinned runtime's GPU allocation ceiling plus CUDA workspace,
     # rather than treating one sampled song's peak as every input's upper bound.
     "tiers": [{"tier": "gpu", "engine": ENGINE, "engine_version": ENGINE_VERSION,

@@ -1,0 +1,20 @@
+"""Node-owned media delivery capability; no engine process or model is involved."""
+
+CAPABILITY = {
+    "id": "media.deliver", "purpose": "media.deliver", "visibility": "public",
+    "description": "将当前 A 节点已有的媒体按原始字节交付到调用方明确提供的 PUT 地址；"
+                   "media 输入使用 ref，支持 1–32 个任意类型媒体，按序对应 delivery.media 地址数组；"
+                   "最多并发上传 4 个文件。引用受 LRU 淘汰约束，失效返回 media_not_found；"
+                   "批次可能部分上传成功，失败后可用新地址重试。跨节点调用须指定原任务所属 node_id。",
+    "tiers": [{"tier": "cpu", "engine": "media-store", "engine_version": "1",
+               "cost": "low", "max_concurrency": 1}],
+    "input": {"fields": [{
+        "name": "media", "kind": "media", "required": True,
+        "description": "当前节点已有媒体的 ref 数组；不接受 inline 或 get。",
+        "accepts": ["*/*"], "cardinality": {"min": 1, "max": 32},
+    }]},
+    "output": {"fields": [{
+        "name": "media", "kind": "media", "required": True,
+        "produces": ["*/*"], "cardinality": {"min": 1, "max": 32},
+    }], "agent_context": "none"},
+}

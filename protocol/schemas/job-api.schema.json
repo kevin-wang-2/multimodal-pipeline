@@ -65,13 +65,18 @@
         "type": {
           "$ref": "urn:mmp:protocol:3:capability#/$defs/TaskTypeId"
         },
+        "node_id": {
+          "description": "可选的目标 A 节点；使用节点本地 media_id 继续处理或交付时，应指定原任务 job_id 所属节点。省略时按能力与队列选节点。",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+        },
         "arguments": {
           "description": "按 capability.input.fields 的 name 提交命名输入；A 按字段 kind/schema/MIME/cardinality 校验。",
           "type": "object",
           "minProperties": 1
         },
         "delivery": {
-          "description": "media output 字段名到受控 PUT endpoint（或与多值输出等长的 endpoint 数组）的映射；没有 endpoint 时只能在内联上限内返回。",
+          "description": "media output 字段名到受控 PUT endpoint（或与多值输出等长的 endpoint 数组）的映射；没有 endpoint 时，小媒体内联，大媒体仅返回引用。media.deliver 使用此字段显式授权上传。",
           "type": "object",
           "additionalProperties": {
             "oneOf": [
@@ -178,6 +183,7 @@
       "additionalProperties": false
     },
     "MediaOutput": {
+      "description": "媒体已存储在产出它的 A 节点。inline 表示内联字节，delivered 表示已 PUT；两者均省略表示仅返回引用，可通过 media.deliver 后续交付。引用受节点媒体存储 LRU 淘汰约束，不保证永久有效；失效返回 media_not_found。",
       "type": "object",
       "properties": {
         "kind": { "const": "media" },
@@ -189,10 +195,7 @@
         "delivered": { "const": true }
       },
       "required": ["kind", "content_type", "bytes", "sha256", "media_id"],
-      "oneOf": [
-        { "required": ["inline"], "not": { "required": ["delivered"] } },
-        { "required": ["delivered"], "not": { "required": ["inline"] } }
-      ],
+      "not": { "required": ["inline", "delivered"] },
       "additionalProperties": false
     },
     "OutputAtom": {

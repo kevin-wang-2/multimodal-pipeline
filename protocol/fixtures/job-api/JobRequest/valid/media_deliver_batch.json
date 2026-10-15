@@ -1,0 +1,25 @@
+{
+  "type": "media.deliver",
+  "node_id": "node-a",
+  "arguments": {
+    "media": [
+      {
+        "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  },
+  "delivery": {
+    "media": [
+      {
+        "url": "https://upload.example/one"
+      },
+      {
+        "url": "https://upload.example/two"
+      }
+    ]
+  },
+  "wait": 30
+}

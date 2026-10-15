@@ -3,7 +3,7 @@
  * 与 node/mmp_broker/core.py 一一对应；两者跑同一批 protocol/fixtures/broker-scenarios。
  * 无状态：只有已连接节点、能力表（在节点上）、在途请求三张内存表。
  */
-import { ApiError, type Capability, type HeartbeatPayload, type JobRequest, type RequestPayload, type ResponsePayload } from "@mmp/protocol";
+import { ApiError, PROTOCOL_VERSION, type Capability, type HeartbeatPayload, type JobRequest, type RequestPayload, type ResponsePayload } from "@mmp/protocol";
 
 export type SendFn = (payload: RequestPayload, signal?: AbortSignal) => Promise<ResponsePayload>;
 export type Reply = { status: number; body: Record<string, unknown> };
@@ -55,7 +55,7 @@ export class Broker {
 
   constructor(o: BrokerOptions) {
     this.nodeKey = o.nodeKey;
-    this.protocolVersion = o.protocolVersion ?? "3.0";
+    this.protocolVersion = o.protocolVersion ?? PROTOCOL_VERSION;
     this.inflightGraceSec = o.inflightGraceSec ?? 5;
     this.offlineAfter = (o.heartbeatIntervalSec ?? 10) * (o.missedHeartbeats ?? 3);
     this.now = o.now ?? (() => Date.now() / 1000);
@@ -118,8 +118,13 @@ export class Broker {
   }
 
   // ---- 路由 ----
-  private pick(taskType: string): NodeLink {
-    const cands = this.live().filter((l) => l.capabilities.some((c) => c.id === taskType));
+  private pick(taskType: string, nodeId?: string): NodeLink {
+    const live = this.live();
+    if (nodeId !== undefined && !live.some((l) => l.nodeId === nodeId)) {
+      throw new ApiError("node_offline", `node ${nodeId} is not connected`);
+    }
+    const cands = live.filter((l) => (nodeId === undefined || l.nodeId === nodeId)
+      && l.capabilities.some((c) => c.id === taskType));
     if (cands.length === 0) throw new ApiError("no_node", `no online node offers '${taskType}'`);
     return cands.reduce((a, b) => ((b.heartbeat?.queue_len ?? 0) < (a.heartbeat?.queue_len ?? 0) ? b : a));
   }
@@ -159,7 +164,7 @@ export class Broker {
   // ---- 五个操作 ----
   async submit(job: JobRequest): Promise<Reply> {
     try {
-      const link = this.pick(job.type);
+      const link = this.pick(job.type, job.node_id);
       return await this.call(link, { op: "submit", job }, Number(job.wait ?? 0));
     } catch (e) { return Broker.fail(e); }
   }

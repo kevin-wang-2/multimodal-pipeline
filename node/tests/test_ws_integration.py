@@ -385,7 +385,7 @@ async def test_submit_over_ws_returns_before_slow_media_download(tmp_path, monke
         broker.stop()
 
 
-async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path):
+async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path, media_server):
     import wave
     from PIL import Image
 
@@ -400,7 +400,7 @@ async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path):
     cfg = make_config(tmp_path, engines={
         "media_image": {"module": "engines.media_image", "timeout_sec": 10},
         "media_audio": {"module": "engines.media_audio", "timeout_sec": 10},
-    }, broker__enabled=False, media__max_inline_result_bytes=1024 * 1024)
+    }, broker__enabled=False, media__max_inline_result_bytes=16)
     node = Node(cfg, NODE_DIR)
     await node.start()
     link = WsLink(node, endpoint(port))
@@ -410,7 +410,7 @@ async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path):
         await broker.wait_nodes(1)
         script = Path(__file__).with_name("client_media_tools_smoke.mjs")
         proc = await asyncio.create_subprocess_exec(
-            NODE_BIN, str(script), f"http://127.0.0.1:{port}", str(image_path), str(audio_path),
+            NODE_BIN, str(script), f"http://127.0.0.1:{port}", str(image_path), str(audio_path), media_server.url(""),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), 30)
@@ -420,6 +420,7 @@ async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path):
                 await proc.wait()
         assert proc.returncode == 0, stderr.decode(errors="replace")
         assert b'"cached":true' in stdout
+        assert len(media_server.puts) == 2
     finally:
         broker.stop()
         await link.close()

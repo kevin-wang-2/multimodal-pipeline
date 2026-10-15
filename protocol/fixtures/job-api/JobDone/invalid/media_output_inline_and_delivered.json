@@ -1,0 +1,41 @@
+{
+  "job_id": "mac-m1-01J7ZQ9K3W8B6Q4M2N1P5R7S9T",
+  "type": "image.generate",
+  "status": "done",
+  "media_ids": {},
+  "cached": false,
+  "source": {
+    "tier": "gpu",
+    "engine": "krea2-turbo-fp8",
+    "engine_version": "1",
+    "generated_at": "2026-09-10T17:00:00+08:00",
+    "degraded": false,
+    "arguments": {
+      "prompt": "一只纸雕鲸鱼",
+      "options": {
+        "width": 1024,
+        "height": 1024,
+        "seed": 42
+      }
+    }
+  },
+  "outputs": {
+    "image": {
+      "kind": "media",
+      "content_type": "image/png",
+      "bytes": 1048576,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "inline": "YQ==",
+      "delivered": true
+    },
+    "metadata": {
+      "kind": "json",
+      "value": {
+        "width": 1024,
+        "height": 1024,
+        "seed": 42
+      }
+    }
+  }
+}

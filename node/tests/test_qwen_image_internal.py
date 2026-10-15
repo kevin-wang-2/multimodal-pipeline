@@ -56,10 +56,10 @@ async def test_qwen_and_krea_internal_capabilities_coexist_but_remote_registrati
     try:
         bound = (await stack.client.get("/capabilities")).json()["capabilities"]
         assert {item["capability"]["id"] for item in bound} == {
-            "image.generate.internal", "image.generate.qwen", "image.edit.qwen",
+            "image.generate.internal", "image.generate.qwen", "image.edit.qwen", "media.deliver",
         }
-        assert stack.node.register_message()["payload"]["capabilities"] == []
-        assert stack.node.register_message()["payload"]["engine_versions"] == {}
+        assert [cap["id"] for cap in stack.node.register_message()["payload"]["capabilities"]] == ["media.deliver"]
+        assert stack.node.register_message()["payload"]["engine_versions"] == {"media-store": "1"}
     finally:
         await stack.client.aclose()
         await stack.link.close()

@@ -10,6 +10,7 @@ from typing import Callable
 from .config import Config, EngineSection
 from .errors import ApiError
 from . import schemas
+from .delivery import CAPABILITY as DELIVERY_CAPABILITY
 
 TIER_ORDER = ["remote", "gpu", "gpu-fast", "cpu"]  # 贵 → 便宜；回落沿着这个方向
 
@@ -48,6 +49,14 @@ class Registry:
                 for t in cap["tiers"]:
                     spec.tiers[(cap["id"], t["tier"])] = t
                     self.type_engine[(cap["id"], t["tier"])] = name
+        cap = DELIVERY_CAPABILITY
+        if cap["id"] in self.types or "media-store" in self.engines:
+            raise ValueError("media.deliver and media-store are reserved for node-owned delivery")
+        self.types[cap["id"]] = cap
+        self.type_engine[(cap["id"], "cpu")] = "media-store"
+        self.engines["media-store"] = EngineSpec(
+            name="media-store", module="", cmd=[], cwd=engines_dir, timeout_sec=cfg.media.fetch_timeout_sec,
+            capabilities=[cap], tiers={(cap["id"], "cpu"): cap["tiers"][0]})
 
     @staticmethod
     def _load(name: str, sec: EngineSection, engines_dir: Path) -> EngineSpec:

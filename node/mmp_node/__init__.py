@@ -1,3 +1,3 @@
 """A 算力节点：队列、缓存、引擎池、注册表、媒体句柄、A↔B 分发。"""
 
-PROTOCOL_VERSION = "3.0"
+PROTOCOL_VERSION = "3.1"

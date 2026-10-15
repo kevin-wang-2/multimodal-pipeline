@@ -84,7 +84,7 @@ async def main():
 
         try:
             caps = {item["capability"]["id"] for item in broker.capabilities()[1]["capabilities"]}
-            assert caps == {"music.generate"}, caps
+            assert caps == {"music.generate", "media.deliver"}, caps
             _, submitted = await broker.submit(body(arguments, "song"))
             _, queued = await broker.submit(body({**arguments, "options": {"seed": 42}}, "queued"))
             assert queued["status"] == "queued", queued

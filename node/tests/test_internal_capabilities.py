@@ -49,16 +49,16 @@ async def provider(tmp_path, monkeypatch):
 async def test_bound_discovery_and_execution_but_remote_registration_hides_internal(provider):
     stack, calls = provider
     discovered = (await stack.client.get("/capabilities")).json()["capabilities"]
-    assert {x["capability"]["id"] for x in discovered} == {"echo", "echo.internal"}
+    assert {x["capability"]["id"] for x in discovered} == {"echo", "echo.internal", "media.deliver"}
     registration = stack.node.register_message()["payload"]
-    assert [cap["id"] for cap in registration["capabilities"]] == ["echo"]
-    assert registration["engine_versions"] == {"echo": "1"}
+    assert [cap["id"] for cap in registration["capabilities"]] == ["echo", "media.deliver"]
+    assert registration["engine_versions"] == {"echo": "1", "media-store": "1"}
     remote = Broker(NODE_KEY)
     async def send(payload):
         return await stack.node.dispatch(payload)
     # 远端 B 即使收到错误发布的完整表，也不会公开 internal 能力。
     remote.on_register(stack.node.register_message(bound=True), send)
-    assert [x["capability"]["id"] for x in remote.capabilities()[1]["capabilities"]] == ["echo"]
+    assert [x["capability"]["id"] for x in remote.capabilities()[1]["capabilities"]] == ["echo", "media.deliver"]
     assert "private-echo" not in remote.nodes[stack.node.node_id].engine_versions
     assert (await remote.submit({"type": "echo.internal", "arguments": arguments(inline(b"private")), "wait": 1}))[1]["error"] == "no_node"
     done = (await stack.submit(type="echo.internal", arguments=arguments(inline(b"private")), wait=1)).json()
@@ -100,9 +100,9 @@ async def test_remote_public_job_read_filters_internal_discovery_without_mutatin
     job.outputs = {"digest": {"kind": "json", "value": {
         "kind": "image", "format": "image/png", "capabilities_available": ["echo.internal"]}}}
     _, remote = await stack.node.get(job.job_id)
-    assert remote["outputs"]["digest"]["value"]["capabilities_available"] == []
+    assert remote["outputs"]["digest"]["value"]["capabilities_available"] == ["media.deliver"]
     assert job.outputs["digest"]["value"]["capabilities_available"] == ["echo.internal"]
-    assert stack.node.registry.capabilities_for_digest(job.outputs["digest"]["value"], include_internal=True) == ["echo.internal"]
+    assert stack.node.registry.capabilities_for_digest(job.outputs["digest"]["value"], include_internal=True) == ["echo.internal", "media.deliver"]
 
 
 async def test_real_remote_broker_cannot_read_or_cancel_bound_internal_job(provider, tmp_path):
@@ -118,7 +118,7 @@ async def test_real_remote_broker_cannot_read_or_cancel_bound_internal_job(provi
         done = (await stack.submit(type="echo.internal", arguments=arguments(inline(b"private")), wait=1)).json()
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=5, trust_env=False) as client:
             caps = (await client.get("/capabilities")).json()["capabilities"]
-            assert {x["capability"]["id"] for x in caps} == {"echo"}
+            assert {x["capability"]["id"] for x in caps} == {"echo", "media.deliver"}
             denied = await client.post("/jobs", json={"type": "echo.internal", "arguments": arguments(inline(b"private"))})
             assert denied.status_code == 503 and denied.json()["error"] == "no_node"
             assert (await client.get(f"/jobs/{done['job_id']}")).status_code == 404

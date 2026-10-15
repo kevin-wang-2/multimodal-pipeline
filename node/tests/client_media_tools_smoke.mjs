@@ -20,6 +20,15 @@ const split = await client.run({ type: "audio.channels", arguments: {
   options: { mode: "split" },
 } });
 assert.equal(split.outputs.audio.length, 2);
+assert.ok(split.outputs.audio.every((output) => !output.inline && !output.delivered));
+const deliver = await client.resolveCapability({ purpose: "media.deliver", contentType: "audio/flac" });
+const deliveryJob = { type: deliver.id, node_id: split.job_id.slice(0, -27),
+  arguments: { media: split.outputs.audio.map((output) => media.ref(output.media_id)) },
+  delivery: { media: split.outputs.audio.map((_, index) => ({ url: `${process.argv[5]}/channel-${index}.flac` })) },
+};
+const delivered = await client.run(deliveryJob);
+assert.deepEqual(delivered.outputs.media.map((output) => output.media_id), split.outputs.audio.map((output) => output.media_id));
+assert.ok(delivered.outputs.media.every((output) => output.delivered));
 const request = { type: "audio.concat", arguments: {
   audio: split.outputs.audio.map((output) => media.ref(output.media_id)),
 } };

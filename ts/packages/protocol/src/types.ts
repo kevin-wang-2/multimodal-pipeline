@@ -64,20 +64,6 @@ export type RequestPayload = {
       [k: string]: unknown;
     }
 );
-export type MediaOutput = {
-  kind: "media";
-  content_type: string;
-  bytes: number;
-  sha256: string;
-  /**
-   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
-   */
-  media_id: string;
-  inline?: string;
-  delivered?: true;
-} & {
-  [k: string]: unknown;
-};
 /**
  * 本次交付的引擎算力审计口径。只计算 run 消息发出到 result 收到的引擎执行时间，不含排队、模型加载、媒体取放与结果 PUT。
  */
@@ -502,13 +488,17 @@ export interface JobRequest {
    */
   type: string;
   /**
+   * 可选的目标 A 节点；使用节点本地 media_id 继续处理或交付时，应指定原任务 job_id 所属节点。省略时按能力与队列选节点。
+   */
+  node_id?: string;
+  /**
    * 按 capability.input.fields 的 name 提交命名输入；A 按字段 kind/schema/MIME/cardinality 校验。
    */
   arguments: {
     [k: string]: unknown;
   };
   /**
-   * media output 字段名到受控 PUT endpoint（或与多值输出等长的 endpoint 数组）的映射；没有 endpoint 时只能在内联上限内返回。
+   * media output 字段名到受控 PUT endpoint（或与多值输出等长的 endpoint 数组）的映射；没有 endpoint 时，小媒体内联，大媒体仅返回引用。media.deliver 使用此字段显式授权上传。
    */
   delivery?: {
     [k: string]: Endpoint | [Endpoint, ...Endpoint[]];
@@ -604,6 +594,21 @@ export interface TextOutput {
 export interface JsonOutput {
   kind: "json";
   value: unknown;
+}
+/**
+ * 媒体已存储在产出它的 A 节点。inline 表示内联字节，delivered 表示已 PUT；两者均省略表示仅返回引用，可通过 media.deliver 后续交付。引用受节点媒体存储 LRU 淘汰约束，不保证永久有效；失效返回 media_not_found。
+ */
+export interface MediaOutput {
+  kind: "media";
+  content_type: string;
+  bytes: number;
+  sha256: string;
+  /**
+   * 内容 hash，作为 media_id 与缓存键；同一份媒体经内联与经 URL 提交得到同一个值。
+   */
+  media_id: string;
+  inline?: string;
+  delivered?: true;
 }
 /**
  * 由任务实现确定性生成、可直接交给基础模型的上下文；客户端只透传，不解析其中的模态语义。

@@ -166,13 +166,13 @@ async def test_image_agent_context_is_recomputed_on_cache_hit(tmp_path):
     try:
         first = await stack.submit(type="triage.image", arguments={"media": handle}, wait=5)
         assert first.status_code == 200
-        assert first.json()["outputs"]["digest"]["value"]["capabilities_available"] == ["ocr.structured"]
+        assert first.json()["outputs"]["digest"]["value"]["capabilities_available"] == ["media.deliver", "ocr.structured"]
         assert first.json()["agent_context"]["text"].startswith("[mmp:agent-context start]")
         del stack.node.registry.types["ocr.structured"]
         second = await stack.submit(type="triage.image", arguments={"media": {
             "ref": first.json()["media_ids"]["media"]}}, wait=5)
         assert second.json()["cached"] is True
-        assert "可用能力：无" in second.json()["agent_context"]["text"]
-        assert second.json()["outputs"]["digest"]["value"]["capabilities_available"] == []
+        assert "可用能力：media.deliver" in second.json()["agent_context"]["text"]
+        assert second.json()["outputs"]["digest"]["value"]["capabilities_available"] == ["media.deliver"]
     finally:
         await stack.client.aclose(); await stack.link.close(); await stack.node.close()

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
+from mmp_node import PROTOCOL_VERSION
 from mmp_node.errors import ApiError
 from mmp_node.ids import node_of
 
@@ -49,7 +50,7 @@ def _iso(ts: float) -> str:
 
 
 class Broker:
-    def __init__(self, node_key: str, protocol_version: str = "3.0", inflight_grace_sec: float = 5,
+    def __init__(self, node_key: str, protocol_version: str = PROTOCOL_VERSION, inflight_grace_sec: float = 5,
                  heartbeat_interval_sec: float = 10, missed_heartbeats: int = 3, now: Callable[[], float] = time.time):
         self.node_key = node_key
         self.protocol_version = protocol_version
@@ -105,8 +106,12 @@ class Broker:
         return list(self.nodes.values())
 
     # ---- 路由 ----
-    def _pick(self, task_type: str) -> NodeLink:
-        cands = [l for l in self._live() if any(c["id"] == task_type for c in l.capabilities)]
+    def _pick(self, task_type: str, node_id: str | None = None) -> NodeLink:
+        live = self._live()
+        if node_id is not None and not any(l.node_id == node_id for l in live):
+            raise ApiError("node_offline", f"node {node_id} is not connected")
+        cands = [l for l in live if (node_id is None or l.node_id == node_id)
+                 and any(c["id"] == task_type for c in l.capabilities)]
         if not cands:
             raise ApiError("no_node", f"no online node offers {task_type!r}")
         return min(cands, key=lambda l: l.queue_len)
@@ -133,7 +138,7 @@ class Broker:
     # ---- 五个操作 ----
     async def submit(self, job: dict) -> tuple[int, dict]:
         try:
-            link = self._pick(job["type"])
+            link = self._pick(job["type"], job.get("node_id"))
             return await self._call(link, {"op": "submit", "job": job}, float(job.get("wait", 0)))
         except ApiError as e:
             return e.http_status, e.body()

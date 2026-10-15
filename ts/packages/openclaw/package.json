@@ -1,6 +1,6 @@
 {
   "name": "@mmp/openclaw",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "multimodal-pipeline 的 OpenClaw 适配：按附件 MIME 发现 triage 能力并透传任务端 agent context，失败时显式降级。",
   "license": "Apache-2.0",

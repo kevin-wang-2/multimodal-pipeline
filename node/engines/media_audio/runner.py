@@ -196,6 +196,8 @@ async def process(job):
         filters.append(f"aresample={output_rate}")
     elif op == "channels":
         mode = opts["mode"]
+        if "channels" in opts and mode != "split":
+            raise MediaError("invalid_argument: channels is only valid for mode=split")
         if mode == "extract":
             if "channel" not in opts or opts["channel"] >= channels:
                 raise MediaError(f"invalid_argument: channel must be in 0..{channels - 1}")
@@ -205,7 +207,12 @@ async def process(job):
             if "channel" in opts:
                 raise MediaError("invalid_argument: channel is only valid for mode=extract")
             if mode == "split":
-                channel_indices, output_channels = list(range(channels)), 1
+                channel_indices = opts.get("channels", list(range(channels)))
+                if (not isinstance(channel_indices, list) or not channel_indices
+                        or any(type(index) is not int or not 0 <= index < channels for index in channel_indices)
+                        or len(set(channel_indices)) != len(channel_indices)):
+                    raise MediaError(f"invalid_argument: channels must contain unique indices in 0..{channels - 1}")
+                output_channels = 1
             else:
                 output_channels = 1 if mode == "mono" else 2
                 filters.append(f"aformat=channel_layouts={output_channels}c")
@@ -343,7 +350,7 @@ async def process(job):
         peaks = [float(p) for p in re.findall(r"Peak level dB: ([-+0-9.inf]+)", log)]
         if peaks and max(peaks) > 0.001:
             raise MediaError("invalid_argument: output would clip; reduce gain, normalize mixing, or explicitly limit volume")
-        for destination in destinations:
+        for source_channel, destination in zip(channel_indices, destinations):
             size = destination.stat().st_size
             total_bytes += size
             if total_bytes >= MAX_BYTES:
@@ -355,6 +362,8 @@ async def process(job):
                 raise MediaError("unsupported_output: encoder cannot preserve the requested channel count")
             if actual["sample_rate"] != output_rate:
                 raise MediaError("unsupported_output: encoder cannot preserve the requested sample rate")
+            if source_channel is not None:
+                actual["source_channel"] = source_channel
             metadata.append(actual)
             outputs.append({"kind": "media", "content_type": mime,
                             "data_base64": base64.b64encode(destination.read_bytes()).decode("ascii")})

@@ -491,6 +491,46 @@ async def test_real_audio_split_array_and_cached_continuation(media_stack, tmp_p
     assert done["outputs"]["metadata"]["value"]["files"][0]["duration_sec"] == pytest.approx(1)
 
 
+async def test_large_selected_split_references_then_batch_delivery(media_stack, tmp_path, media_server):
+    media_stack.node.cfg.media.max_inline_result_bytes = 16
+    item = wav_file(tmp_path, channels=3)
+    job = {"type": "audio.channels", "arguments": {
+        "audio": inline(Path(item["path"]).read_bytes()),
+        "options": {"mode": "split", "channels": [2, 0], "format": "wav"}}, "wait": 5}
+    for cached in [False, True]:
+        done = (await media_stack.submit(**job)).json()
+        assert done["status"] == "done" and done["cached"] is cached, done
+        assert [f["source_channel"] for f in done["outputs"]["metadata"]["value"]["files"]] == [2, 0]
+        outputs = done["outputs"]["audio"]
+        assert len(outputs) == 2
+        assert all("inline" not in output and "delivered" not in output for output in outputs)
+    # Select only one of the produced files for export; the remaining output stays on A.
+    selected = outputs[:1]
+    delivered = (await media_stack.submit(type="media.deliver", node_id=media_stack.node.node_id,
+        arguments={"media": [{"ref": output["media_id"]} for output in selected]},
+        delivery={"media": [media_server.put_endpoint("/selected.wav")]}, wait=5)).json()
+    assert delivered["status"] == "done", delivered
+    assert delivered["outputs"]["media"][0]["media_id"] == selected[0]["media_id"]
+    with wave.open(io.BytesIO(media_server.puts["/selected.wav"])) as result:
+        assert result.getnchannels() == 1
+        actual = struct.unpack(f"<{result.getnframes()}h", result.readframes(result.getnframes()))
+    with wave.open(item["path"]) as original:
+        source = struct.unpack(f"<{original.getnframes() * 3}h", original.readframes(original.getnframes()))
+    assert actual == source[2::3]
+    # Existing direct PUT remains available for callers that know their output count.
+    direct = (await media_stack.submit(**{**job, "delivery": {"audio": [
+        media_server.put_endpoint("/two.wav"), media_server.put_endpoint("/zero.wav")]}})).json()
+    assert direct["status"] == "done" and direct["cached"] is True
+    assert all(output["delivered"] for output in direct["outputs"]["audio"])
+
+
+@pytest.mark.parametrize("channels", [[], [0, 0], [3], [-1], [True]])
+async def test_split_rejects_invalid_selection(tmp_path, channels):
+    with pytest.raises(MediaError, match="channels"):
+        await audio.process(audio_job("channels", wav_file(tmp_path, channels=3),
+                                      mode="split", channels=channels))
+
+
 async def test_real_invalid_media_fails_and_engine_recovers(media_stack, tmp_path):
     bad = (await media_stack.submit(type="image.convert", arguments={"image": inline(b"not-image")}, wait=5)).json()
     assert bad["status"] == "failed" and bad["error"] == "bad_request", bad

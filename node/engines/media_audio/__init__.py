@@ -3,7 +3,7 @@
 from engines.common.media_tools import choice, integer, number, options
 
 ENGINE = "media-audio"
-ENGINE_VERSION = "1"
+ENGINE_VERSION = "2"
 FORMAT = {
     "format": choice("wav", "flac", "mp3", "ogg", "opus", "m4a", default="flac"),
     "bitrate_kbps": integer(16, 320),
@@ -26,6 +26,9 @@ def capability(op, description, properties=None, required=(), many=False):
             fields[-1]["schema"]["allOf"] = [{
                 "if": {"properties": {"mode": {"const": "extract"}}},
                 "then": {"required": ["channel"]}, "else": {"not": {"required": ["channel"]}},
+            }, {
+                "if": {"properties": {"mode": {"const": "split"}}},
+                "else": {"not": {"required": ["channels"]}},
             }]
         if op == "silence":
             fields[-1]["schema"] = {"type": "object", "oneOf": [
@@ -45,6 +48,7 @@ def capability(op, description, properties=None, required=(), many=False):
                             "sample_rate": integer(1, 384000), "channels": integer(1, 32),
                             "duration_sec": number(0, 86400), "bytes": integer(0, 9007199254740991),
                             "bit_depth": integer(0, 64),
+                            "source_channel": integer(0, 31),
                         }, "required": ["format", "codec", "sample_rate", "channels", "duration_sec", "bytes"],
                         "additionalProperties": False,
                     }}, "timings_ms": {"type": "object"},
@@ -69,8 +73,10 @@ CAPABILITIES = [
     capability("resample", "重采样为指定 Hz，不改变播放速度", {
         "sample_rate": integer(8000, 192000),
     }, ("sample_rate",)),
-    capability("channels", "提取零起始声道、按序拆分全部声道、混成单声道或转双声道；总是返回媒体数组", {
+    capability("channels", "提取零起始声道；split 可用 channels 数组按给定顺序拆分所选声道，省略则拆分全部；也可混成单声道或转双声道；总是返回媒体数组，metadata.files 按序标记 source_channel", {
         "mode": choice("extract", "split", "mono", "stereo"), "channel": integer(0, 31),
+        "channels": {"type": "array", "minItems": 1, "maxItems": 32,
+                     "uniqueItems": True, "items": integer(0, 31)},
     }, ("mode",)),
     capability("volume", "按 dB 调整音量；默认拒绝削波，limit 显式启用峰值限制", {
         "gain_db": number(-96, 24), "clipping": choice("reject", "limit", default="reject"),

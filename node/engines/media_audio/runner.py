@@ -282,12 +282,13 @@ async def process(job):
             filters.append(f"aeval=exprs='if(gte(t,{start})*lt(t,{end}),0,val(ch))':c=same")
         else:
             threshold, minimum = opts.get("threshold_db", -50), opts.get("min_silence_sec", 0.1)
-            progress, log = await execute([*ffmpeg(), *input_args(paths[0]), "-map", "0:a:0", "-vn", "-af",
-                f"silencedetect=noise={threshold}dB:d={minimum}", "-progress", "pipe:1", "-f", "null", "-"], capture=True)
-            times = re.findall(r"out_time_us=(\d+)", progress)
-            if not times:
-                raise RuntimeError("processing_failed: FFmpeg did not report decoded duration")
-            decoded_duration = int(times[-1]) / 1_000_000
+            _, log = await execute([*ffmpeg(), *input_args(paths[0]), "-map", "0:a:0", "-vn", "-af",
+                f"silencedetect=noise={threshold}dB:d={minimum},"
+                "astats=measure_perchannel=none:measure_overall=Number_of_samples", "-f", "null", "-"])
+            counts = re.findall(r"Number of samples:\s+([0-9.]+)", log)
+            if not counts:
+                raise RuntimeError("processing_failed: FFmpeg did not report decoded sample count")
+            decoded_duration = float(counts[-1]) / rate
             starts = [float(s) for s in re.findall(r"silence_start: ([0-9.e+-]+)", log)]
             ends = [float(s) for s in re.findall(r"silence_end: ([0-9.e+-]+)", log)]
             seek, end = 0, decoded_duration

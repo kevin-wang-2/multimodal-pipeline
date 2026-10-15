@@ -43,6 +43,7 @@ class Node:
                                cfg.scheduler.vram_total_mb, cfg.scheduler.vram_headroom_mb)
         self.sched = Scheduler(cfg, self.registry, self.pool, self.cache, self.media)
         self.jobs: dict[str, Job] = {}
+        self._preparing: dict[str, Job] = {}
         self._seq = 0
         self._field_validators: dict[tuple[str, str], Draft202012Validator] = {}
         self._gc_task: asyncio.Task | None = None
@@ -68,11 +69,17 @@ class Node:
 
     def begin_shutdown(self) -> None:
         self.sched.begin_shutdown()
+        for job in self._preparing.values():
+            if job.task:
+                job.task.cancel()
 
     async def close(self) -> None:
         self.begin_shutdown()
         if self._gc_task:
             self._gc_task.cancel()
+        tasks = [job.task for job in self._preparing.values() if job.task]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         await self.sched.stop()
         await self.pool.close()
         await self.media.aclose()
@@ -96,50 +103,70 @@ class Node:
         priority = req.get("priority", "interactive")
         wait_s = float(req.get("wait", 0) if wait is None else wait)
 
-        self.sched.check_backpressure()          # 先于取媒体：别为了说 429 先下载 100MB
-        t_fetch = time.monotonic()
+        self.sched.check_backpressure(len(self._preparing))
         delivery = self._validate_delivery(cap, req.get("delivery") or {})
-        arguments, media_ids, media_types, cache_arguments = await self._prepare_arguments(cap, req.get("arguments") or {})
-        fetch_ms = int((time.monotonic() - t_fetch) * 1000)
-        key = task_key(task_type, tier["tier"], tier["engine_version"], cache_arguments, bound=bound)
-
-        hit = self.cache.get(key)
-        if hit is not None:
-            job = self._new_job(task_type, priority, tier, arguments, media_ids, media_types, delivery, key, bound)
-            job.cached, job.source = True, hit["source"]
-            job.timings_ms = {"fetch": fetch_ms}
-            job.usage = {"served_from": "cache", "tier": job.source["tier"], "engine": job.source["engine"],
-                         "compute_ms": 0, "wasted_ms": 0}
-            job.raw_outputs = hit["outputs"]
-            job.raw_outputs = self.sched._finish_outputs(job, job.raw_outputs)
-            job.agent_context = self.sched._agent_context(job, job.raw_outputs)
-            await self.sched._place_outputs(job, job.raw_outputs)
-            job.finish("done")
+        arguments = self._validate_arguments(cap, req.get("arguments") or {})
+        submission_key = task_key(task_type, tier["tier"], tier["engine_version"], arguments, bound=bound)
+        job = next((j for j in self.jobs.values() if not j.terminal
+                    and j.submission_key == submission_key and j.delivery == delivery), None)
+        if job is None:
+            job = self._new_job(task_type, priority, tier, arguments, {}, {}, delivery, "", bound)
+            job.submission_key = submission_key
             self.jobs[job.job_id] = job
-            log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
-                                 "tier": job.source["tier"], "degraded": job.source.get("degraded"),
-                                 "cached": True, "usage": job.usage, "timings_ms": job.timings_ms},
-                                ensure_ascii=False))
-            return job.response()
-
-        active = self.sched.find_active(key, delivery)
-        if active is not None:
-            await active.wait(wait_s)
-            return active.response()
-
-        job = self._new_job(task_type, priority, tier, arguments, media_ids, media_types, delivery, key, bound)
-        job.timings_ms["fetch"] = fetch_ms       # ref 命中时 ≈ 0：这就是"没重复拉"的证据
-        self.jobs[job.job_id] = job
-        for media_id in self._all_media_ids(job):
-            self.media.pin(media_id)
-        try:
-            self.sched.enqueue(job)
-        except ApiError:
-            for media_id in self._all_media_ids(job):
-                self.media.unpin(media_id)
-            raise
+            self._preparing[job.job_id] = job
+            job.task = asyncio.create_task(self._prepare_job(job, cap), name=f"prepare-{job.job_id}")
+            # 让纯本地准备有机会入队；网络下载不会阻塞 submit 的 wait 预算。
+            await asyncio.sleep(0)
         await job.wait(wait_s)
-        return job.response()
+        return self._response(job, bound=bound)
+
+    async def _prepare_job(self, job: Job, cap: dict) -> None:
+        enqueued = False
+        try:
+            t_fetch = time.monotonic()
+            arguments, media_ids, media_types, cache_arguments = await self._prepare_arguments(cap, job.arguments, job)
+            job.arguments, job.media_ids, job.media_content_types = arguments, media_ids, media_types
+            job.timings_ms["fetch"] = int((time.monotonic() - t_fetch) * 1000)
+            job.key = task_key(job.task_type, job.tier["tier"], job.tier["engine_version"], cache_arguments, bound=job.bound)
+            hit = self.cache.get(job.key)
+            if hit is not None:
+                job.cached, job.source = True, hit["source"]
+                job.usage = {"served_from": "cache", "tier": job.source["tier"], "engine": job.source["engine"],
+                             "compute_ms": 0, "wasted_ms": 0}
+                job.raw_outputs = self.sched._finish_outputs(job, hit["outputs"])
+                job.agent_context = self.sched._agent_context(job, job.raw_outputs)
+                await self.sched._place_outputs(job, job.raw_outputs)
+                job.finish("done")
+            else:
+                active = self.sched.find_active(job.key, job.delivery)
+                if active is not None:
+                    # 不同媒体句柄解析为同一内容时共享计算，保留已返回的任务身份。
+                    await active.done.wait()
+                    for name in ("source", "outputs", "raw_outputs", "agent_context", "usage"):
+                        setattr(job, name, copy.deepcopy(getattr(active, name)))
+                    job.timings_ms.update({k: v for k, v in active.timings_ms.items() if k != "fetch"})
+                    job.finish(active.status, active.error)
+                else:
+                    self.sched.enqueue(job)
+                    enqueued = True
+        except asyncio.CancelledError:
+            if self.sched._stopping:
+                job.finish("failed", ApiError("node_offline", "node is shutting down"))
+            else:
+                job.finish("cancelled")
+        except ApiError as e:
+            job.finish("failed", e)
+        except Exception as e:
+            log.exception("job %s failed preparing media", job.job_id)
+            job.finish("failed", ApiError("engine_failed", f"{type(e).__name__}: {e}"))
+        finally:
+            self._preparing.pop(job.job_id, None)
+            if not enqueued:
+                for media_id in self._all_media_ids(job):
+                    self.media.unpin(media_id)
+                log.info(json.dumps({"job": job.job_id, "type": job.task_type, "status": job.status,
+                                     "cached": job.cached, "usage": job.usage, "timings_ms": job.timings_ms},
+                                    ensure_ascii=False))
 
     async def get(self, job_id: str, wait: float = 0, *, bound: bool = False) -> tuple[int, dict]:
         job = self._job(job_id, bound=bound)
@@ -149,7 +176,12 @@ class Node:
     async def cancel(self, job_id: str, wait: float = 0, *, bound: bool = False) -> tuple[int, dict]:
         job = self._job(job_id, bound=bound)
         if not job.terminal:
-            self.sched.cancel(job)
+            if job.job_id in self._preparing:
+                job.cancel_requested = True
+                job.task.cancel()
+                await asyncio.gather(job.task, return_exceptions=True)
+            else:
+                self.sched.cancel(job)
             await job.wait(wait)
         return self._response(job, bound=bound)
 
@@ -182,11 +214,11 @@ class Node:
                 out[name] = prop["default"]
         return out
 
-    async def _prepare_arguments(self, cap: dict, raw: dict) -> tuple[dict, dict, dict, dict]:
+    def _validate_arguments(self, cap: dict, raw: dict) -> dict:
         fields = {field["name"]: field for field in cap["input"]["fields"]}
         if extra := set(raw) - set(fields):
             raise ApiError("bad_request", f"unknown arguments {sorted(extra)}")
-        arguments, media_ids, media_types, cache_arguments = {}, {}, {}, {}
+        arguments = {}
         for name, field in fields.items():
             if field["required"] and name not in raw:
                 raise ApiError("bad_request", f"missing required argument {name!r}")
@@ -198,7 +230,7 @@ class Node:
                 if field["kind"] == "json":
                     value = self._normalize_json(field["schema"], {})
                     if value:
-                        arguments[name] = cache_arguments[name] = value
+                        arguments[name] = value
                 continue
             value = raw[name]
             if field["kind"] == "text" and not isinstance(value, str):
@@ -209,7 +241,7 @@ class Node:
             errs = list(validator.iter_errors(value))
             if errs:
                 raise ApiError("bad_request", f"arguments.{name}: " + "; ".join(e.message for e in errs[:3]))
-            arguments[name] = cache_arguments[name] = value
+            arguments[name] = value
         for name, field in fields.items():
             if field["kind"] != "media" or name not in raw:
                 continue
@@ -225,7 +257,26 @@ class Node:
                 errs = schemas.errors(handle_validator, handle)
                 if errs:
                     raise ApiError("bad_request", f"arguments.{name}: " + "; ".join(errs[:3]))
-            fetched = [await self.media.fetch(handle) for handle in handles]
+            arguments[name] = copy.deepcopy(value)
+        return arguments
+
+    async def _prepare_arguments(self, cap: dict, arguments: dict, job: Job) -> tuple[dict, dict, dict, dict]:
+        arguments = copy.deepcopy(arguments)
+        media_ids, media_types, cache_arguments = {}, {}, dict(arguments)
+        for field in cap["input"]["fields"]:
+            name = field["name"]
+            if field["kind"] != "media" or name not in arguments:
+                continue
+            many = field["cardinality"]["max"] != 1
+            handles = arguments[name] if many and isinstance(arguments[name], list) else [arguments[name]]
+            fetched = []
+            for handle in handles:
+                item = await self.media.fetch(handle)
+                self.media.pin(item.media_id)
+                fetched.append(item)
+                # 逐个记录 pin：后续字段下载失败或取消时也能释放已准备的媒体。
+                ids = [item.media_id for item in fetched]
+                job.media_ids[name] = ids if many else ids[0]
             for item in fetched:
                 self._validate_media_type(cap["id"], field, item.content_type)
             resolved = [{"media_id": item.media_id, "path": str(item.path),
@@ -280,7 +331,7 @@ class Node:
         })
 
     def heartbeat_message(self, vram_free_mb: int | None = None, *, bound: bool = False) -> dict:
-        p = {"node_id": self.node_id, "queue_len": self.sched.queue_len, "running": self.sched.running,
+        p = {"node_id": self.node_id, "queue_len": self.sched.queue_len + len(self._preparing), "running": self.sched.running,
              "engines_loaded": [name for name in self.pool.loaded() if bound or any(
                  cap["visibility"] == "public" for cap in self.registry.engines[name].capabilities)]}
         if vram_free_mb is not None:

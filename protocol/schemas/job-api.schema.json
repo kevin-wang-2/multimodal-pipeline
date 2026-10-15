@@ -156,6 +156,7 @@
       "additionalProperties": false
     },
     "MediaIds": {
+      "description": "按输入字段名回显已解析的媒体标识；下载尚未完成的字段暂不出现，准备阶段可以为空对象。",
       "type": "object",
       "additionalProperties": {
         "oneOf": [
@@ -311,7 +312,7 @@
       "additionalProperties": false
     },
     "JobPending": {
-      "description": "202：排队中或运行中。",
+      "description": "202：排队中（含媒体准备）或运行中；媒体准备也计入请求 wait 上限。",
       "type": "object",
       "properties": {
         "job_id": {

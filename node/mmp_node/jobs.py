@@ -23,6 +23,7 @@ class Job:
     delivery: dict                # media output 字段名 → PUT endpoint
     key: str
     seq: int
+    submission_key: str = ""           # 下载前对规范化输入去重，不持久化媒体 URL / 凭据
     bound: bool = False           # 由绑定 / WS 连接确定，客户端不能指定
     created_at: float = field(default_factory=time.time)
     status: str = "queued"

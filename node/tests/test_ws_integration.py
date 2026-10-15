@@ -340,6 +340,51 @@ async def test_broker_rejects_non_register_first_frame(tmp_path):
         b.stop()
 
 
+async def test_submit_over_ws_returns_before_slow_media_download(tmp_path, monkeypatch):
+    port = free_port()
+    broker_dir = tmp_path / "broker"
+    broker_dir.mkdir()
+    broker = BrokerProc(port, broker_dir, grace=0.1)
+    cfg = make_config(tmp_path, broker__enabled=False)
+    node = Node(cfg, NODE_DIR)
+    link = WsLink(node, endpoint(port))
+    entered, release = asyncio.Event(), asyncio.Event()
+    fetch = node.media.fetch
+
+    async def slow_fetch(_handle):
+        entered.set()
+        await release.wait()
+        return await fetch(inline(blob(100)))
+
+    monkeypatch.setattr(node.media, "fetch", slow_fetch)
+    await node.start()
+    try:
+        await broker.start()
+        link.start()
+        await broker.wait_nodes(1)
+        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=5, trust_env=False) as client:
+            response = await client.post("/jobs", json={"type": "echo", "arguments": {
+                "media": {"get": {"url": "https://media.test/slow"}},
+            }, "wait": 0})
+            assert response.status_code == 202, response.text
+            assert_valid(V_ANY, response.json())
+            job_id = response.json()["job_id"]
+            await entered.wait()
+            await asyncio.sleep(0.2)  # 下载超过 B-ts 提交期限，心跳与查询仍正常。
+            pending = await client.get(f"/jobs/{job_id}")
+            assert pending.status_code == 202 and pending.json()["media_ids"] == {}
+            release.set()
+            done = await client.get(f"/jobs/{job_id}", params={"wait": 2})
+            assert done.status_code == 200, done.text
+            assert_valid(V_ANY, done.json())
+            assert done.json()["job_id"] == job_id
+            assert done.json()["outputs"]["result"]["value"]["bytes"] == 100
+    finally:
+        await link.close()
+        await node.close()
+        broker.stop()
+
+
 async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path):
     import wave
     from PIL import Image

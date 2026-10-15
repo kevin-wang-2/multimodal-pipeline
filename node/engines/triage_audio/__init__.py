@@ -6,7 +6,7 @@
 from .presentation import render_agent_context
 
 ENGINE = "silero-vad+sensevoice-int8+zipformer-tagging-int8"
-ENGINE_VERSION = "2026-09-21b"         # 模型组合或后处理规则变了就改；进缓存键。21b：asr.confidence=打标 Speech 分数、VAD 漏检由打标补救、不猜原因
+ENGINE_VERSION = "2026-10-15a"         # 模型组合或后处理规则变了就改；进缓存键。15a：nospeech 作为控制标记，语言未知并显式提示转写不可靠
 
 PARAMS_SCHEMA = {
     "type": "object",

@@ -187,3 +187,13 @@ def test_vad_missed_speech_recovered_by_tagger_is_marked():
     assert_valid(V_DIGEST, with_source(d))
     assert d["segments"][1]["asr"]["text"] == "是什么歌"
     assert any("VAD 未判为语音，但打标 Speech 0.98" in g and "已补跑 ASR" in g for g in d["gaps"])
+
+
+@pytest.mark.parametrize("language", ["nospeech", "<|nospeech|>"])
+def test_nospeech_control_token_is_not_a_language(language):
+    segs = [RawSegment(0, 1, True, labels=[{"tag": "Music", "score": .9}],
+                       asr={"text": "The.", "lang": language, "confidence": 0.0})]
+    digest = build_digest(MID, 1.0, segs, {"vad": "ok", "audio_tagging": "ok", "asr": "ok"}, .3, {})
+    assert_valid(V_DIGEST, with_source(digest))
+    assert digest["segments"][0]["asr"] == {"text": "The.", "lang": "n/a", "confidence": 0.0}
+    assert any("nospeech" in gap and "转写不可靠" in gap for gap in digest["gaps"])

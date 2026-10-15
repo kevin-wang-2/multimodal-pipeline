@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 
 MIN_GAP_SEC = 0.05     # 语音段之间小于这个的空隙不单独成段
 SHORT_GAP_SEC = 0.6    # 夹在两段语音之间、短于此的非语音段：可能是句内停顿，也可能是有内容的短事件（一声口哨）——点出来，不替上层判断
@@ -70,7 +71,11 @@ def build_digest(media_id: str, duration: float, segs: list[RawSegment], tools: 
         if s.speech:
             speech_dur += s.end - s.start
             if s.asr is not None:
-                asr = {"text": s.asr.get("text", ""), "lang": s.asr.get("lang") or "n/a"}
+                lang = (s.asr.get("lang") or "").strip("<>|")
+                # SenseVoice 的 nospeech 是控制标记，不能充当协议中的语言标签。
+                asr = {"text": s.asr.get("text", ""), "lang": lang if re.fullmatch(r"[a-z]{2,3}", lang) else "n/a"}
+                if lang == "nospeech":
+                    gaps.append(f"{span} ASR 返回 nospeech（未识别到语音），转写不可靠、语言未知")
                 asr["confidence"] = s.asr["confidence"] if isinstance(s.asr.get("confidence"), (int, float)) else "n/a"
                 seg["asr"] = asr
                 dur_ms = int((s.end - s.start) * 1000)

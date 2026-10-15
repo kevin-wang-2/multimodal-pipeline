@@ -568,6 +568,9 @@ export interface JobDone {
     [k: string]: number;
   };
 }
+/**
+ * 按输入字段名回显已解析的媒体标识；下载尚未完成的字段暂不出现，准备阶段可以为空对象。
+ */
 export interface MediaIds {
   [k: string]: string | [string, ...string[]];
 }
@@ -611,7 +614,7 @@ export interface AgentContext {
   text: string;
 }
 /**
- * 202：排队中或运行中。
+ * 202：排队中（含媒体准备）或运行中；媒体准备也计入请求 wait 上限。
  */
 export interface JobPending {
   /**

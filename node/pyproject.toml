@@ -18,11 +18,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+media = ["pillow>=12.3"]  # CPU image tools; audio tools use system FFmpeg + FFprobe.
 dev = [
   "pytest>=8",
   "pytest-asyncio>=0.23",
   "numpy>=1.26",          # tests 直接 import 引擎的 vad.py / digest.py / quality.py 做单测
-  "pillow>=10",
+  "pillow>=12.3",
   "rfc3339-validator>=0.1.4",
   "rfc3986-validator>=0.1.1",
 ]

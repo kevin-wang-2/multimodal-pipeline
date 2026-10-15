@@ -44,6 +44,12 @@ jobs:
       - name: Install python deps
         run: .venv/bin/pip install -q -e "node[dev]" -r protocol/tests/py/requirements.txt
 
+      - name: Install CPU media codecs
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq ffmpeg
+          .venv/bin/python node/tools/check_media_tools.py
+
       - name: Contract tests (jsonschema)
         run: ../../../.venv/bin/python -m pytest -q
         working-directory: protocol/tests/py
@@ -77,6 +83,8 @@ jobs:
     env:
       PYTHONUTF8: "1"
       PY_NODE: C:\ProgramData\miniconda3\envs\mmp-node\python.exe
+      MMP_FFMPEG: ${{ vars.MMP_FFMPEG }}
+      MMP_FFPROBE: ${{ vars.MMP_FFPROBE }}
       MMP_ENGINE_PYTHON: C:\ProgramData\miniconda3\envs\mmp-audio\python.exe
       MMP_MODELS_DIR: C:\mmp\models
       MMP_SMOKE_WAVS: C:\mmp\testdata
@@ -121,6 +129,7 @@ jobs:
           %PY_NODE% -m pip install -q -e "node[dev]" || exit /b 1
           %MMP_ENGINE_PYTHON% -c "import sherpa_onnx, onnxruntime; print('engine env ok', sherpa_onnx.__version__)" || exit /b 1
           %MMP_IMAGE_PYTHON% -c "import torch, transformers, PIL; print('image env ok', torch.__version__, transformers.__version__)" || exit /b 1
+          %PY_NODE% node\tools\check_media_tools.py || exit /b 1
       - name: Build ts workspace (B-ts for the ws integration test)
         shell: cmd
         working-directory: ts
@@ -169,6 +178,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: windows
     timeout-minutes: 15
+    env:
+      MMP_FFMPEG: ${{ vars.MMP_FFMPEG }}
+      MMP_FFPROBE: ${{ vars.MMP_FFPROBE }}
     steps:
       - name: Checkout deployment script
         shell: cmd

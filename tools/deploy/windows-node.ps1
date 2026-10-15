@@ -31,7 +31,7 @@ function Invoke-AuthenticatedGit {
 }
 
 function Install-Node {
-    & $Python -m pip install -q -e "$Repo\node" --no-warn-script-location
+    & $Python -m pip install -q -e "$Repo\node[media]" --no-warn-script-location
     if ($LASTEXITCODE -ne 0) { throw "pip install failed with exit code $LASTEXITCODE" }
 }
 
@@ -68,6 +68,8 @@ try {
     Invoke-Git checkout --quiet main
     Invoke-Git merge --ff-only $ExpectedSha
     Install-Node
+    & $Python "$Repo\node\tools\check_media_tools.py"
+    if ($LASTEXITCODE -ne 0) { throw "CPU media dependencies are incomplete" }
     Restart-Node
     Wait-Healthy
     Write-Host "deployed $ExpectedSha (previous $PreviousSha)"

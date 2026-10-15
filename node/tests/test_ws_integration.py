@@ -338,3 +338,44 @@ async def test_broker_rejects_non_register_first_frame(tmp_path):
             assert e.value.rcvd.code == 4003
     finally:
         b.stop()
+
+
+async def test_cpu_media_tools_through_real_bts_and_typescript_client(tmp_path):
+    import wave
+    from PIL import Image
+
+    image_path, audio_path = tmp_path / "input.bin", tmp_path / "audio.bin"
+    with Image.new("RGB", (12, 8), "red") as im:
+        im.save(image_path, format="PNG")
+    with wave.open(str(audio_path), "wb") as wav:
+        wav.setparams((2, 2, 16000, 0, "NONE", ""))
+        wav.writeframes(b"\x10\x00\x20\x00" * 8000)
+    port = free_port()
+    broker = BrokerProc(port, tmp_path)
+    cfg = make_config(tmp_path, engines={
+        "media_image": {"module": "engines.media_image", "timeout_sec": 10},
+        "media_audio": {"module": "engines.media_audio", "timeout_sec": 10},
+    }, broker__enabled=False, media__max_inline_result_bytes=1024 * 1024)
+    node = Node(cfg, NODE_DIR)
+    await node.start()
+    link = WsLink(node, endpoint(port))
+    try:
+        await broker.start()
+        link.start()
+        await broker.wait_nodes(1)
+        script = Path(__file__).with_name("client_media_tools_smoke.mjs")
+        proc = await asyncio.create_subprocess_exec(
+            NODE_BIN, str(script), f"http://127.0.0.1:{port}", str(image_path), str(audio_path),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), 30)
+        finally:
+            if proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+        assert proc.returncode == 0, stderr.decode(errors="replace")
+        assert b'"cached":true' in stdout
+    finally:
+        broker.stop()
+        await link.close()
+        await node.close()

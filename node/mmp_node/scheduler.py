@@ -91,11 +91,11 @@ class Scheduler:
     def running(self) -> int:
         return len(self._running)
 
-    def check_backpressure(self) -> None:
+    def check_backpressure(self, preparing: int = 0) -> None:
         if self._stopping:
             raise ApiError("node_offline", "node is shutting down")
-        if self.queue_len >= self.cfg.queue.max_len:
-            raise ApiError("backpressure", f"queue full ({self.queue_len})", retry_after_sec=self.cfg.queue.retry_after_sec)
+        if self.queue_len + preparing >= self.cfg.queue.max_len:
+            raise ApiError("backpressure", f"queue full ({self.queue_len + preparing})", retry_after_sec=self.cfg.queue.retry_after_sec)
 
     def find_active(self, key: str, delivery: dict) -> Job | None:
         for j in list(self._queued.values()) + list(self._running.values()):

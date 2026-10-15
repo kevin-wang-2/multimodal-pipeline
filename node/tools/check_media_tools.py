@@ -30,7 +30,7 @@ def main():
                 result = subprocess.run([path, "-hide_banner", flag], capture_output=True, timeout=10)
                 result.check_returncode()
                 available = {line.split()[1] for line in result.stdout.decode("utf-8").splitlines()
-                             if re.match(r"^ [A-Z.]{3,6}\s+\S+", line)}
+                             if re.match(r"^\s+[A-Z.]+\s+\S+", line)}
                 if missing := names - available:
                     raise RuntimeError(f"FFmpeg {flag} missing: {', '.join(sorted(missing))}")
     print("CPU media dependencies ready")

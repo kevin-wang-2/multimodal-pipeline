@@ -377,6 +377,17 @@ async def test_nonfinite_parameters_are_explicit_errors(tmp_path, value):
         await audio.process(audio_job("volume", wav_file(tmp_path), gain_db=value))
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+async def test_nonfinite_float_audio_samples_fail_instead_of_becoming_zero(tmp_path, value):
+    data = struct.pack("<8000f", *([0.1] * 4000 + [value] + [0.1] * 3999))
+    fmt = struct.pack("<HHIIHH", 3, 1, 16000, 64000, 4, 32)
+    path = tmp_path / "invalid-float.wav"
+    path.write_bytes(b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVEfmt " + struct.pack("<I", 16) +
+                     fmt + b"data" + struct.pack("<I", len(data)) + data)
+    with pytest.raises(MediaError, match="NaN|infinite"):
+        await audio.process(audio_job("convert", {"path": str(path)}))
+
+
 async def test_audio_invalid_content_playlists_truncation_and_limits(tmp_path, monkeypatch):
     path = tmp_path / "not-audio.bin"
     path.write_bytes(b"not audio")

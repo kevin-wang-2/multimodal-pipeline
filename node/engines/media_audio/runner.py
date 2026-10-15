@@ -322,7 +322,8 @@ async def process(job):
             if index is not None:
                 chain.insert(0, f"pan=mono|c0=c{index}")
             # Measure float peaks before integer encoding; fail instead of silently clipping.
-            peak_filter = "aformat=sample_fmts=fltp,astats=measure_perchannel=none:measure_overall=Peak_level"
+            peak_filter = ("aformat=sample_fmts=fltp,astats=measure_perchannel=none:"
+                           "measure_overall=Peak_level+Number_of_NaNs+Number_of_Infs")
             if graph:
                 cmd += ["-filter_complex", graph.replace("[out]", "[pre]") + f";[pre]{peak_filter}[out]", "-map", "[out]"]
             else:
@@ -336,6 +337,9 @@ async def process(job):
                     "-fs", str(MAX_BYTES), str(destination)]
         # Mapping several output filters from one input decodes that input only once.
         _, log = await execute(cmd, outputs=destinations)
+        invalid_samples = re.findall(r"Number of (?:NaNs|Infs):\s+([0-9.]+)", log)
+        if any(float(count) > 0 for count in invalid_samples):
+            raise MediaError("invalid_media: decoded audio contains NaN or infinite samples")
         peaks = [float(p) for p in re.findall(r"Peak level dB: ([-+0-9.inf]+)", log)]
         if peaks and max(peaks) > 0.001:
             raise MediaError("invalid_argument: output would clip; reduce gain, normalize mixing, or explicitly limit volume")

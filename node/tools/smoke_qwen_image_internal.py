@@ -115,8 +115,22 @@ async def main() -> None:
                               "options": {"resolution": 1024, "seed": 561003}},
                 "delivery": delivery("03-edit-previous-output.png"),
             }
-            continued, wall = await finish(broker, continued_request)
-            assert continued["timings_ms"]["fetch"] == 0
+            fetch_media = node.media.fetch
+            fetched_media = []
+
+            async def track_fetch(handle):
+                result = await fetch_media(handle)
+                fetched_media.append(result)
+                return result
+
+            node.media.fetch = track_fetch
+            try:
+                continued, wall = await finish(broker, continued_request)
+            finally:
+                node.media.fetch = fetch_media
+            assert len(fetched_media) == 1
+            assert fetched_media[0].media_id == previous
+            assert fetched_media[0].fetched is False
             records.append(("continue", continued, wall))
 
             cached, wall = await finish(broker, {

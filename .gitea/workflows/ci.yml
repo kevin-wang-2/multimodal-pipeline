@@ -91,7 +91,10 @@ jobs:
         run: .venv/bin/python -m pytest -q tools/ci/test_plugin_smoke.py
 
       - name: Deployment scripts parse
-        run: bash -n tools/deploy/linux-broker.sh
+        run: |
+          bash -n tools/deploy/linux-broker.sh
+          node --check tools/deploy/deepseek-harness.mjs
+          node --test tools/deploy/test-deepseek-harness.mjs
 
   smoke:
     needs: [unit]

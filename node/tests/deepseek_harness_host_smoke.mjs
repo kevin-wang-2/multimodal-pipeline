@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, stat, open } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 // 通过插件自己的依赖解析真实 SDK，不要求仓库根目录有 npm workspace。
 const require = createRequire(new URL("../../ts/packages/deepseek-harness/package.json", import.meta.url));
-const { Context } = await import(require.resolve("@deepseek-ai/cordis"));
-const { default: Tools } = await import(require.resolve("@deepseek-ai/dsh-tools"));
-const { default: SystemPrompt } = await import(require.resolve("@deepseek-ai/dsh-system-prompt"));
-const { ToolCallId } = await import(require.resolve("@deepseek-ai/dsh-llm"));
+const { Context } = await import(pathToFileURL(require.resolve("@deepseek-ai/cordis")).href);
+const { default: Tools } = await import(pathToFileURL(require.resolve("@deepseek-ai/dsh-tools")).href);
+const { default: SystemPrompt } = await import(pathToFileURL(require.resolve("@deepseek-ai/dsh-system-prompt")).href);
+const { ToolCallId } = await import(pathToFileURL(require.resolve("@deepseek-ai/dsh-llm")).href);
 const plugin = await import("../../ts/packages/deepseek-harness/dist/index.js");
 const [baseUrl, imagePath, audioPath, largePath, dataDir] = process.argv.slice(2);
 const objects = new Map();

@@ -45,29 +45,29 @@ export class MmpClient {
   }
 
   // ---- 五个操作 ----
-  submit(job: JobRequest): Promise<JobStatusResponse> {
-    return this.request("POST", "/jobs", job, Number(job.wait ?? 0)) as Promise<JobStatusResponse>;
+  submit(job: JobRequest, signal?: AbortSignal): Promise<JobStatusResponse> {
+    return this.request("POST", "/jobs", job, Number(job.wait ?? 0), signal) as Promise<JobStatusResponse>;
   }
 
-  get(jobId: string, waitSec = 0): Promise<JobStatusResponse> {
-    return this.request("GET", `/jobs/${encodeURIComponent(jobId)}${waitSec ? `?wait=${Math.trunc(waitSec)}` : ""}`, undefined, waitSec) as Promise<JobStatusResponse>;
+  get(jobId: string, waitSec = 0, signal?: AbortSignal): Promise<JobStatusResponse> {
+    return this.request("GET", `/jobs/${encodeURIComponent(jobId)}${waitSec ? `?wait=${Math.trunc(waitSec)}` : ""}`, undefined, waitSec, signal) as Promise<JobStatusResponse>;
   }
 
-  cancel(jobId: string, waitSec = 0): Promise<JobStatusResponse> {
-    return this.request("DELETE", `/jobs/${encodeURIComponent(jobId)}${waitSec ? `?wait=${Math.trunc(waitSec)}` : ""}`, undefined, waitSec) as Promise<JobStatusResponse>;
+  cancel(jobId: string, waitSec = 0, signal?: AbortSignal): Promise<JobStatusResponse> {
+    return this.request("DELETE", `/jobs/${encodeURIComponent(jobId)}${waitSec ? `?wait=${Math.trunc(waitSec)}` : ""}`, undefined, waitSec, signal) as Promise<JobStatusResponse>;
   }
 
-  capabilities(): Promise<CapabilitiesResponse> {
-    return this.request("GET", "/capabilities") as Promise<CapabilitiesResponse>;
+  capabilities(signal?: AbortSignal): Promise<CapabilitiesResponse> {
+    return this.request("GET", "/capabilities", undefined, 0, signal) as Promise<CapabilitiesResponse>;
   }
 
-  async resolveCapability(query: CapabilityQuery) {
-    return resolveCapability(await this.capabilities(), query);
+  async resolveCapability(query: CapabilityQuery, signal?: AbortSignal) {
+    return resolveCapability(await this.capabilities(signal), query);
   }
 
   /** 按 id 拉取一项能力的说明、输入 schema、档位与输出契约。 */
-  async describe(id: string) {
-    return describeCapability(await this.capabilities(), id);
+  async describe(id: string, signal?: AbortSignal) {
+    return describeCapability(await this.capabilities(signal), id);
   }
 
   health(): Promise<HealthResponse> {
@@ -82,7 +82,7 @@ export class MmpClient {
       opts.signal?.throwIfAborted();
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new MmpError("timeout", `job ${jobId} not done within ${opts.timeoutMs ?? 600_000}ms`, { jobId });
-      const r = await this.get(jobId, Math.min(pollWait, Math.ceil(remaining / 1000)));
+      const r = await this.get(jobId, Math.min(pollWait, Math.ceil(remaining / 1000)), opts.signal);
       if (r.status === "done") return r as JobDone;
       if (r.status === "cancelled") throw new MmpError("unexpected", `job ${jobId} was cancelled`, { jobId, body: r });
     }
@@ -90,50 +90,62 @@ export class MmpClient {
 
   /** 提交并等到结果。job.wait 缺省用 pollWaitSec，缓存命中 / 短任务一次往返就回。 */
   async run(job: JobRequest, opts: WaitOptions = {}): Promise<JobDone> {
-    const first = await this.submit({ ...job, wait: job.wait ?? Math.min(120, opts.pollWaitSec ?? 30) });
+    const first = await this.submit({ ...job, wait: job.wait ?? Math.min(120, opts.pollWaitSec ?? 30) }, opts.signal);
     if (first.status === "done") return first as JobDone;
     if (first.status === "cancelled") throw new MmpError("unexpected", `job ${first.job_id} was cancelled`, { jobId: first.job_id, body: first });
     return this.wait(first.job_id, opts);
   }
 
   // ---- 传输 ----
-  private async request(method: string, path: string, body?: unknown, waitSec = 0): Promise<unknown> {
+  private async request(method: string, path: string, body?: unknown, waitSec = 0, signal?: AbortSignal): Promise<unknown> {
     const timeoutMs = this.o.requestTimeoutMs ? this.o.requestTimeoutMs(waitSec) : Math.max(20_000, (waitSec + 15) * 1000);
     const headers: Record<string, string> = { accept: "application/json", ...(this.o.headers ?? {}) };
     if (this.o.apiKey) headers.authorization = `Bearer ${this.o.apiKey}`;
     if (body !== undefined) headers["content-type"] = "application/json";
     let attempt = 0;
     for (;;) {
+      signal?.throwIfAborted();
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       let res: Response;
+      let text: string;
+      let receivedResponse = false;
       try {
-        res = await this.fetchImpl(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
+        res = await this.fetchImpl(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: signal ? AbortSignal.any([signal, ctrl.signal]) : ctrl.signal });
+        receivedResponse = true;
+        text = await res.text();
       } catch (e) {
         clearTimeout(timer);
-        const err = (e as Error)?.name === "AbortError"
+        signal?.throwIfAborted();
+        const err = ctrl.signal.aborted
           ? new MmpError("timeout", `${method} ${path} timed out after ${timeoutMs}ms`, { cause: e })
           : new MmpError("network", `${method} ${path}: ${(e as Error)?.message ?? e}`, { cause: e });
-        if (attempt < this.o.retries && err.retryable) { await this.backoff(attempt++); continue; }
+        // 提交已有响应头但响应体断开时，任务可能已经入队，不能盲目重提。
+        if (attempt < this.o.retries && err.retryable && !(method === "POST" && receivedResponse)) { await this.backoff(attempt++, undefined, signal); continue; }
         throw err;
       }
       clearTimeout(timer);
-      const text = await res.text();
       let json: any;
       try { json = text ? JSON.parse(text) : {}; } catch { throw new MmpError("unexpected", `${method} ${path}: non-JSON response (HTTP ${res.status})`, { status: res.status, body: text }); }
       if (res.ok) return json;
       const err = MmpError.fromBody(res.status, json);
       // 原样重试只对"节点掉线 / 背压"有意义，且必须是幂等的读操作或还没入队的提交（错误体没有 job_id）
       if (attempt < this.o.retries && err.retryable && !err.jobId) {
-        await this.backoff(attempt++, err.retryAfterSec);
+        await this.backoff(attempt++, err.retryAfterSec, signal);
         continue;
       }
       throw err;
     }
   }
 
-  private backoff(attempt: number, retryAfterSec?: number): Promise<void> {
+  private backoff(attempt: number, retryAfterSec?: number, signal?: AbortSignal): Promise<void> {
     const ms = retryAfterSec !== undefined ? retryAfterSec * 1000 : this.o.retryBaseMs * 2 ** attempt * (0.8 + Math.random() * 0.4);
-    return new Promise((r) => setTimeout(r, Math.min(ms, 30_000)));
+    return new Promise((resolve, reject) => {
+      signal?.throwIfAborted();
+      const done = () => { signal?.removeEventListener("abort", abort); resolve(); };
+      const timer = setTimeout(done, Math.min(ms, 30_000));
+      const abort = () => { clearTimeout(timer); reject(signal!.reason); };
+      signal?.addEventListener("abort", abort, { once: true });
+    });
   }
 }

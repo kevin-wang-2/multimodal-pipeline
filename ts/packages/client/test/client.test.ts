@@ -25,6 +25,46 @@ const done = { job_id: JOB, type: "echo", status: "done", media_ids: { media: MI
   source: { tier: "cpu", engine: "e", engine_version: "1", generated_at: "2026-09-21T00:00:00Z", degraded: false },
   usage, outputs: { result: { kind: "json", value: { ok: 1 } } } };
 
+test("caller cancellation interrupts an in-flight poll without retrying", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const fetchImpl = (async (_url: unknown, init: RequestInit) => {
+    calls++; entered();
+    return new Promise<Response>((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true }));
+  }) as typeof fetch;
+  const client = new MmpClient({ baseUrl: "http://mmp", fetch: fetchImpl, retries: 3 });
+  const waiting = client.wait(JOB, { signal: controller.signal });
+  await started;
+  const reason = new Error("caller stopped");
+  controller.abort(reason);
+  await assert.rejects(waiting, (error) => error === reason);
+  assert.equal(calls, 1);
+});
+
+test("caller cancellation interrupts retry backoff and already-aborted submit makes no request", async () => {
+  const controller = new AbortController();
+  const { f, calls } = fakeFetch(() => ({ status: 503, body: { error: "node_offline" } }));
+  const client = new MmpClient({ baseUrl: "http://mmp", fetch: f, retries: 5, retryBaseMs: 10_000 });
+  const waiting = client.get(JOB, 0, controller.signal);
+  setTimeout(() => controller.abort(new Error("stop during backoff")), 10);
+  await assert.rejects(waiting, /stop during backoff/);
+  await assert.rejects(client.submit({ type: "echo", arguments: { text: "x" } }, controller.signal), /stop during backoff/);
+  assert.equal(calls.length, 1);
+});
+
+test("a failed submit response body never replays an already possibly accepted job", async () => {
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls++;
+    return new Response(new ReadableStream({ start(controller) { controller.error(new Error("response disconnected")); } }));
+  }) as typeof fetch;
+  const client = new MmpClient({ baseUrl: "http://mmp", fetch: fetchImpl, retries: 3 });
+  await assert.rejects(client.submit({ type: "echo", arguments: { text: "x" } }), /response disconnected/);
+  assert.equal(calls, 1);
+});
+
 test("submit sends auth + body and returns 200 body; media helpers build valid handles", async () => {
   const { f, calls } = fakeFetch(() => ({ status: 200, body: done }));
   const c = new MmpClient({ baseUrl: "https://b.example/", apiKey: "k", fetch: f });

@@ -33,7 +33,7 @@ jobs:
         run: |
           test -n "$MMP_NPM_AUTH" || { echo "secret MMP_NPM_AUTH missing"; exit 1; }
           echo "//mmp.seanartech.com/npm/:_auth=$MMP_NPM_AUTH" >> ~/.npmrc
-          for p in protocol broker client openclaw; do
+          for p in protocol broker client openclaw deepseek-harness; do
             name=$(node -p "require('./packages/$p/package.json').name")
             version=$(node -p "require('./packages/$p/package.json').version")
             error_file=$(mktemp)

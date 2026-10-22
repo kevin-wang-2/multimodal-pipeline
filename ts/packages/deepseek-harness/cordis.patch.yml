@@ -1,0 +1,9 @@
+- insert:
+    - id: mmp
+      name: '@mmp/deepseek-harness'
+      # 在 profile 自己的 cordis.patch.yml 中覆盖 config；apiKey 也可用 MMP_API_KEY。
+      config:
+        baseUrl: !!js process.env.MMP_BASE_URL
+        transferHost: !!js process.env.MMP_TRANSFER_HOST
+        transferPort: 18765
+        transferBaseUrl: !!js process.env.MMP_TRANSFER_BASE_URL

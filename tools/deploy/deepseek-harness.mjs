@@ -30,7 +30,13 @@ deploy 从 Git 固定提交构建独立目录，维护本插件配置并重启�
 `;
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options });
+  try { return execFileSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"], ...options }); }
+  catch (error) { throw new Error(`${command} ${args[0] ?? ""} 失败（exit=${error.status ?? error.code}）`); }
+}
+
+function jsonFile(path) {
+  try { return JSON.parse(readFileSync(path, "utf8")); }
+  catch (error) { if (error instanceof SyntaxError) throw new Error(`JSON 文件格式无效：${path}`); throw error; }
 }
 
 export function patchProfile(original, configPath) {
@@ -39,7 +45,8 @@ export function patchProfile(original, configPath) {
   if ((start < 0) !== (end < 0) || (start >= 0 && end < start)) throw new Error("profile 中的 MMP 配置块不完整，请先修复");
   const prefix = start < 0 ? original : original.slice(0, start) + original.slice(end + END.length).replace(/^\r?\n/, "");
   const expression = `JSON.parse(process.getBuiltinModule('node:fs').readFileSync(${JSON.stringify(configPath)}, 'utf8')).plugin`;
-  const base = prefix.trim() === "[]" ? "" : prefix;
+  const content = prefix.split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith("#")).join("\n").trim();
+  const base = content === "[]" ? prefix.replace(/^[ \t]*\[\][ \t]*(?:\r?\n|$)/m, "") : prefix;
   return `${base}${base && !base.endsWith("\n") ? "\n" : ""}${BEGIN}\n- id: mmp\n  config: !!js ${JSON.stringify(expression)}\n${END}\n`;
 }
 
@@ -82,7 +89,7 @@ async function privateJson(path, value) {
 }
 
 export function loadConfig(path) {
-  const config = JSON.parse(readFileSync(path, "utf8"));
+  const config = jsonFile(path);
   for (const key of ["dshHome", "root", "logFile"]) {
     if (!config[key] || !config[key].startsWith("/")) throw new Error(`配置 ${key} 必须是绝对路径`);
   }
@@ -102,12 +109,12 @@ export function loadConfig(path) {
 async function init(path, options) {
   if (existsSync(path)) throw new Error("配置已存在，请直接编辑该文件；init 不覆盖密钥或现有配置");
   for (const key of ["mmp-config", "transfer-host", "service-label", "web-url", "log-file"]) if (!options[key]) throw new Error(`init 缺少 --${key}`);
-  const upstream = JSON.parse(await readFile(resolve(options["mmp-config"]), "utf8"));
+  const upstream = jsonFile(resolve(options["mmp-config"]));
   const dshHome = resolve(options["dsh-home"] ?? process.env.DSH_HOME ?? join(homedir(), ".dsh"));
   const port = Number(options["transfer-port"] ?? 18765);
   const host = options["transfer-host"];
   const config = {
-    dshHome, root: join(dshHome, "mmp", "plugin"), profile: options.profile ?? "web",
+    dshHome, root: join(dshHome, "mmp", "plugin", options.profile ?? "web"), profile: options.profile ?? "web",
     serviceLabel: options["service-label"], webUrl: new URL(options["web-url"]).origin,
     logFile: resolve(options["log-file"]),
     plugin: { baseUrl: upstream.baseUrl, ...(upstream.apiKey ? { apiKey: upstream.apiKey } : {}),
@@ -132,7 +139,8 @@ export async function runtimeInventory(config) {
   // 仅在内存中交换本机启动令牌；不打印日志、令牌或 Cookie。
   const tokens = [...(await tail(config.logFile)).matchAll(/[?&]token=([a-zA-Z0-9._~-]+)/g)];
   if (!tokens.length) throw new Error("日志末尾未找到 Harness 启动 URL，无法验证认证后的插件状态");
-  const exchange = await fetch(`${config.webUrl}/?token=${tokens.at(-1)[1]}`, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+  const exchange = await fetch(`${config.webUrl}/?token=${tokens.at(-1)[1]}`, { redirect: "manual", signal: AbortSignal.timeout(5000) })
+    .catch(() => { throw new Error("无法连接 Harness Web"); });
   const cookie = exchange.headers.get("set-cookie")?.split(";", 1)[0];
   if (![302, 303].includes(exchange.status) || !cookie) throw new Error("Harness 启动令牌交换失败");
   const endpoint = "pluginManager/listPlugins";
@@ -140,7 +148,7 @@ export async function runtimeInventory(config) {
     method: "POST", headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({ type: "client-request", rpcId: randomUUID(), method: endpoint, payload: { args: {} } }),
     signal: AbortSignal.timeout(5000),
-  });
+  }).catch(() => { throw new Error("无法查询 Harness 插件清单"); });
   if (!response.ok) throw new Error(`Harness 插件状态接口 HTTP ${response.status}`);
   const body = await response.json();
   if (!body.result?.ok || !Array.isArray(body.result.value)) throw new Error("Harness 未返回有效插件清单");
@@ -160,9 +168,10 @@ export async function verify(config, baseline = [], expectMmp = true) {
   if (expectMmp) {
     const health = await fetch(`${config.plugin.baseUrl}/health`, {
       headers: config.plugin.apiKey ? { authorization: `Bearer ${config.plugin.apiKey}` } : {}, signal: AbortSignal.timeout(5000),
-    });
+    }).catch(() => { throw new Error("内网 MMP health 不可达"); });
     if (!health.ok || (await health.json()).status !== "ok") throw new Error("内网 MMP health 未就绪");
-    const transfer = await fetch(`${config.plugin.transferBaseUrl}/mmp-transfer/deployment-check`, { signal: AbortSignal.timeout(5000) });
+    const transfer = await fetch(`${config.plugin.transferBaseUrl}/mmp-transfer/deployment-check`, { signal: AbortSignal.timeout(5000) })
+      .catch(() => { throw new Error("MMP 内网传输监听不可达"); });
     if (transfer.status !== 404) throw new Error("MMP 内网传输监听未就绪");
   }
   return { mmp: !!mmp, activePlugins: active.length, baselinePreserved: true };
@@ -184,6 +193,7 @@ async function waitReady(config, baseline, expectMmp = true) {
 }
 
 async function buildRelease(config, ref) {
+  if (ref === "origin/main") run("git", ["fetch", "origin"], { cwd: repository });
   const sha = run("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: repository }).trim();
   const releases = join(config.root, "releases");
   const target = join(releases, sha);
@@ -210,16 +220,18 @@ async function buildRelease(config, ref) {
   return { sha, packagePath };
 }
 
-async function deploy(config, configPath, ref) {
+async function deploy(config, ref) {
   const baseline = (await runtimeInventory(config)).filter((entry) => entry.enabled && entry.fiberPhase === "active").map((entry) => entry.moduleName);
   const { sha, packagePath } = await buildRelease(config, ref);
   const record = { ...await snapshot(config.profilePath, config.current, sha), baseline };
   const previousBytes = await optionalFile(config.statePath);
   const previousState = previousBytes ? JSON.parse(previousBytes) : null;
   const transaction = join(config.root, "history", `${randomUUID()}.json`);
+  const runtimeConfig = join(config.root, "configs", `${randomUUID()}.json`);
+  await privateJson(runtimeConfig, { plugin: config.plugin });
   await privateJson(transaction, { ...record, previousState });
   const patchPath = join(config.profilePath, "cordis.patch.yml");
-  const patch = patchProfile((await optionalFile(patchPath))?.toString("utf8") ?? "[]\n", configPath);
+  const patch = patchProfile((await optionalFile(patchPath))?.toString("utf8") ?? "[]\n", runtimeConfig);
   let changed = false;
   try {
     changed = true;
@@ -229,7 +241,7 @@ async function deploy(config, configPath, ref) {
     run("dsh", ["--profile", config.profile, "--dump-config"], { env: { ...process.env, DSH_HOME: config.dshHome } });
     restart(config);
     const health = await waitReady(config, baseline);
-    await privateJson(config.statePath, { sha, transaction });
+    await privateJson(config.statePath, { sha, transaction, runtimeConfig });
     changed = false;
     console.log(JSON.stringify({ deployed: sha, ...health }));
   } catch (error) {
@@ -237,7 +249,7 @@ async function deploy(config, configPath, ref) {
       try {
         await restore(record, config.profilePath, config.current);
         restart(config);
-        await waitReady(config, baseline, baseline.includes(PACKAGE));
+        await waitReady(await runningConfig(config, previousState), baseline, baseline.includes(PACKAGE));
         console.error("部署失败，已恢复部署前的版本与 profile 配置。");
       } catch (recovery) {
         throw new Error(`${error.message}；自动恢复失败：${recovery.message}。恢复快照：${transaction}`);
@@ -252,10 +264,14 @@ async function rollback(config) {
   const record = JSON.parse(await readFile(state.transaction, "utf8"));
   await restore(record, config.profilePath, config.current);
   restart(config);
-  const health = await waitReady(config, record.baseline, record.baseline.includes(PACKAGE));
+  const health = await waitReady(await runningConfig(config, record.previousState), record.baseline, record.baseline.includes(PACKAGE));
   if (record.previousState === null) await rm(config.statePath);
   else await privateJson(config.statePath, record.previousState);
   console.log(JSON.stringify({ rolledBack: state.sha, ...health }));
+}
+
+async function runningConfig(config, state) {
+  return state ? { ...config, plugin: jsonFile(state.runtimeConfig).plugin } : config;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -270,9 +286,15 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === "init") { await init(path, options); return; }
   const config = loadConfig(path);
   if (command === "status") {
-    const state = JSON.parse(await readFile(config.statePath, "utf8"));
+    const bytes = await optionalFile(config.statePath);
+    if (bytes === null) {
+      const inventory = await runtimeInventory(config);
+      console.log(JSON.stringify({ managed: false, mmp: inventory.some((entry) => entry.moduleName === PACKAGE && entry.enabled && entry.fiberPhase === "active") }));
+      return;
+    }
+    const state = JSON.parse(bytes);
     const record = JSON.parse(await readFile(state.transaction, "utf8"));
-    console.log(JSON.stringify({ sha: state.sha, source: realpathSync(config.current), ...await verify(config, record.baseline) }));
+    console.log(JSON.stringify({ sha: state.sha, source: realpathSync(config.current), ...await verify(await runningConfig(config, state), record.baseline) }));
     return;
   }
   if (!["deploy", "rollback"].includes(command)) throw new Error(`未知命令 ${command}`);
@@ -280,7 +302,7 @@ export async function main(argv = process.argv.slice(2)) {
   const lock = await open(join(config.root, "deploy.lock"), "wx", 0o600).catch((error) => { if (error.code === "EEXIST") throw new Error("部署锁已存在；确认没有其他部署进程后再清理 deploy.lock"); throw error; });
   try {
     await lock.writeFile(String(process.pid));
-    if (command === "deploy") await deploy(config, path, options.ref ?? "origin/main");
+    if (command === "deploy") await deploy(config, options.ref ?? "origin/main");
     else await rollback(config);
   } finally { await lock.close(); await rm(join(config.root, "deploy.lock"), { force: true }); }
 }

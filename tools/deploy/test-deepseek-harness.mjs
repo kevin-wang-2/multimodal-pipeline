@@ -14,6 +14,7 @@ test("managed profile patch preserves unrelated YAML and evaluates only the priv
   assert.ok(patched.startsWith(original));
   assert.equal(patchProfile(patched, path), patched);
   assert.ok(!patchProfile("[]\n", path).startsWith("[]"));
+  assert.doesNotMatch(patchProfile("# user overrides\n[]\n", path), /^\[\]$/m);
   const scalar = patched.split("  config: !!js ").at(-1).split("\n")[0];
   const expression = JSON.parse(scalar);
   const plugin = { baseUrl: "http://node.test", apiKey: "private" };
@@ -104,5 +105,11 @@ test("init imports credentials into a private local config and never overwrites 
     if (process.platform !== "win32") assert.equal((await stat(config)).mode & 0o777, 0o600);
     assert.doesNotMatch(output, /do-not-print/);
     await assert.rejects(main(args), /不覆盖/);
+    await writeFile(config, '{"apiKey":"do-not-print');
+    await assert.rejects(main(["status", "--config", config]), (error) => {
+      assert.match(error.message, /JSON 文件格式无效/);
+      assert.doesNotMatch(error.message, /do-not-print/);
+      return true;
+    });
   } finally { console.log = originalLog; await rm(root, { recursive: true, force: true }); }
 });
